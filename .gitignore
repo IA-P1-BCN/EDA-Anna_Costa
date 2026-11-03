@@ -218,3 +218,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Datos del proyecto: se descargan al ejecutar el notebook
+data/raw/
+data/processed/
