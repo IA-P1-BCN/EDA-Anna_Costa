@@ -21,9 +21,11 @@ guarda la versión limpia en `data/processed/`. Las dos carpetas están en `.git
 
 ```text
 ├── notebooks/
-│   └── 01_eda_covid.ipynb   # análisis paso a paso
+│   ├── 01_eda_covid.ipynb   # carga, limpieza y análisis básico
+│   └── 02_outliers.ipynb    # valores atípicos y justificación de la limpieza
 ├── src/
-│   └── limpieza.py          # funciones de carga y limpieza
+│   ├── limpieza.py          # funciones de carga y limpieza
+│   └── graficos.py          # estilo común de los gráficos
 ├── data/                    # se crea al ejecutar (no se sube al repositorio)
 │   ├── raw/
 │   └── processed/
@@ -57,10 +59,14 @@ jupyter notebook notebooks/01_eda_covid.ipynb
 
 Después: *Kernel → Restart & Run All*. También puede abrirse en VS Code seleccionando el intérprete de `.venv`.
 
-Para ejecutarlo entero sin abrirlo:
+Los notebooks se ejecutan **en orden** (01, 02...): cada uno guarda en `data/processed/` los datos que usa el
+siguiente.
+
+Para ejecutarlos enteros sin abrirlos:
 
 ```bash
 jupyter nbconvert --to notebook --execute --inplace notebooks/01_eda_covid.ipynb
+jupyter nbconvert --to notebook --execute --inplace notebooks/02_outliers.ipynb
 ```
 
 ## Qué hay en el análisis
@@ -75,6 +81,11 @@ jupyter nbconvert --to notebook --execute --inplace notebooks/01_eda_covid.ipynb
 3. **Análisis univariado:** casos diarios, muertes diarias y unidad de medida de los tests.
 4. **Análisis bivariado:** evolución en el tiempo, ranking de estados, hospitalizados frente a muertes y
    retraso entre casos y muertes.
+5. **Valores atípicos** (notebook 02):
+   - Por qué el IQR global no sirve con estados de tamaños tan distintos.
+   - IQR por estado: la mayoría de los atípicos son los picos de la ola de invierno.
+   - Detección de atrasos de notificación (picos aislados) y qué hacer con cada tipo.
+   - Repaso de todas las decisiones de limpieza con sus alternativas.
 
 ## Conclusiones principales
 
@@ -84,6 +95,9 @@ jupyter nbconvert --to notebook --execute --inplace notebooks/01_eda_covid.ipynb
   Son cifras absolutas, que reflejan sobre todo la población de cada estado.
 - **Anticipo de las muertes:** los hospitalizados y las muertes diarias van muy de la mano (r = 0,87), y los
   casos anticipan las muertes en unos 23 días.
+- **Atípicos:** casi 9 de cada 10 días atípicos de un estado caen en la ola de invierno y son reales. Los
+  problemáticos son los atrasos de notificación (por ejemplo, 2.559 muertes en Ohio el 12-02-2021): se mantienen
+  y se marcan. Los hospitalizados nuevos acumulan tantos saltos que no se usan.
 
 ## Limitaciones
 
