@@ -5,6 +5,9 @@ a marzo de 2021: carga, limpieza, exploración y conclusiones para un público n
 
 El enunciado del proyecto está en [docs/ENUNCIADO.md](docs/ENUNCIADO.md).
 
+**Informe ejecutivo** (2 páginas, para público no técnico):
+[reports/informe_ejecutivo.pdf](reports/informe_ejecutivo.pdf).
+
 ## Datos
 
 - **Fuente:** [The COVID Tracking Project](https://covidtracking.com/data/download) (The Atlantic), licencia
@@ -28,7 +31,11 @@ guarda la versión limpia en `data/processed/`. Las dos carpetas están en `.git
 ├── src/
 │   ├── limpieza.py          # funciones de carga y limpieza
 │   ├── variables.py         # variables derivadas (ola, región, positividad, letalidad)
-│   └── graficos.py          # estilo común de los gráficos
+│   ├── graficos.py          # estilo común de los gráficos
+│   └── informe.py           # genera el informe ejecutivo en PDF
+├── reports/
+│   ├── informe_ejecutivo.pdf
+│   └── figuras/             # gráficos del informe
 ├── data/                    # se crea al ejecutar (no se sube al repositorio)
 │   ├── raw/
 │   └── processed/
@@ -72,6 +79,12 @@ jupyter nbconvert --to notebook --execute --inplace notebooks/01_eda_covid.ipynb
 jupyter nbconvert --to notebook --execute --inplace notebooks/02_outliers.ipynb
 jupyter nbconvert --to notebook --execute --inplace notebooks/03_variables_y_agrupaciones.ipynb
 jupyter nbconvert --to notebook --execute --inplace notebooks/04_correlaciones_y_tendencias.ipynb
+```
+
+El informe ejecutivo se genera después de los notebooks 01 a 03 (todas sus cifras se calculan a partir de los datos):
+
+```bash
+python -m src.informe
 ```
 
 ## Qué hay en el análisis
