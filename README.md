@@ -37,11 +37,14 @@ guarda la versión limpia en `data/processed/`. Las dos carpetas están en `.git
 │   ├── 02_outliers.ipynb    # valores atípicos y justificación de la limpieza
 │   ├── 03_variables_y_agrupaciones.ipynb  # variables nuevas, groupby y pivot_table
 │   ├── 04_correlaciones_y_tendencias.ipynb # correlaciones, desfases y tendencias
-│   └── 05_normalizar_poblacion.ipynb       # población del Census Bureau y tasas por 100.000 habitantes
+│   ├── 05_normalizar_poblacion.ipynb       # población del Census Bureau y tasas por 100.000 habitantes
+│   └── 06_calidad_y_transformaciones.ipynb # datos dudosos, media móvil y escala logarítmica
 ├── src/
 │   ├── limpieza.py          # funciones de carga y limpieza
 │   ├── variables.py         # variables derivadas (ola, región, positividad, letalidad)
 │   ├── poblacion.py         # carga de la población y unión por código FIPS
+│   ├── calidad.py           # reglas de coherencia, correcciones y días sin publicar
+│   ├── transformaciones.py  # media móvil, efecto del día de la semana y logaritmo
 │   ├── graficos.py          # estilo común de los gráficos
 │   └── informe.py           # genera el informe ejecutivo en PDF
 ├── reports/
@@ -80,7 +83,7 @@ jupyter notebook notebooks/01_eda_covid.ipynb
 
 Después: *Kernel → Restart & Run All*. También puede abrirse en VS Code seleccionando el intérprete de `.venv`.
 
-Los notebooks se ejecutan **en orden** (01, 02, 03, 04, 05...): cada uno guarda en `data/processed/` los datos que usa el
+Los notebooks se ejecutan **en orden** (01, 02, 03, 04, 05, 06...): cada uno guarda en `data/processed/` los datos que usa el
 siguiente.
 
 Para ejecutarlos enteros sin abrirlos:
@@ -91,6 +94,7 @@ jupyter nbconvert --to notebook --execute --inplace notebooks/02_outliers.ipynb
 jupyter nbconvert --to notebook --execute --inplace notebooks/03_variables_y_agrupaciones.ipynb
 jupyter nbconvert --to notebook --execute --inplace notebooks/04_correlaciones_y_tendencias.ipynb
 jupyter nbconvert --to notebook --execute --inplace notebooks/05_normalizar_poblacion.ipynb
+jupyter nbconvert --to notebook --execute --inplace notebooks/06_calidad_y_transformaciones.ipynb
 ```
 
 El informe ejecutivo se genera después de los notebooks 01 a 03 (todas sus cifras se calculan a partir de los datos):
@@ -129,6 +133,12 @@ python -m src.informe
      pierden filas ni estados.
    - Casos, muertes y máximo de hospitalizados por cada 100.000 habitantes.
    - Ranking de estados absoluto frente a ranking por habitante, y muertes por habitante de cada región en cada ola.
+9. **Calidad de los datos y transformaciones** (notebook 06):
+   - Reglas de coherencia entre columnas (positivos y tests, muertes y casos, UCI, respirador y recuperados).
+   - Incrementos diarios frente a acumulados y correcciones por estado y fecha.
+   - Días sin publicar (ceros que no son ceros) y efecto del día de la semana.
+   - Media móvil de 7 días y escala logarítmica, con su justificación, y tabla con el tratamiento de cada tipo de
+     dato dudoso.
 
 ## Conclusiones principales
 
@@ -152,6 +162,10 @@ python -m src.informe
   más muertes (254), seguido de Massachusetts y Rhode Island. En la primavera de 2020 el Noreste tuvo unas 100
   muertes por cada 100.000 habitantes, una cifra comparable a la de cada región en toda la ola de otoño-invierno
   (entre 89 y 112).
+- **Calidad de los datos:** los datos imposibles son pocos y están localizados (59 filas con más positivos que
+  tests, todas en marzo de 2020 o antes). Lo que más distorsiona es el calendario de publicación: 562 días con 0
+  casos en estados con miles de casos y muertes del lunes al 55 % de lo normal. Por eso las series se ven con
+  media de 7 días.
 
 ## Limitaciones
 
