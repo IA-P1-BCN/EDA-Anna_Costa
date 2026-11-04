@@ -7,6 +7,7 @@ import matplotlib.ticker as mticker
 AZUL = "#2a78d6"      # casos
 NARANJA = "#eb6834"   # muertes
 VERDE = "#1baf7a"     # hospitalizados
+AMARILLO = "#eda100"  # positividad (poco contraste sobre fondo claro: siempre con etiqueta directa)
 GRIS = "#b9b8b2"      # contexto / resto
 TEXTO = "#0b0b0b"
 TEXTO_SUAVE = "#52514e"
@@ -45,3 +46,9 @@ def aplicar_estilo() -> None:
 def formato_miles(numero: float) -> str:
     """12345.6 -> '12.346'."""
     return f"{numero:,.0f}".replace(",", ".")
+
+
+def lineas_olas(ax, cortes) -> None:
+    """Dibuja una línea discontinua en cada fecha de corte entre olas."""
+    for fecha in cortes:
+        ax.axvline(fecha, color=TEXTO_SUAVE, linewidth=1, linestyle="--", zorder=1)

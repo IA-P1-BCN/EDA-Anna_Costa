@@ -23,7 +23,8 @@ guarda la versión limpia en `data/processed/`. Las dos carpetas están en `.git
 ├── notebooks/
 │   ├── 01_eda_covid.ipynb   # carga, limpieza y análisis básico
 │   ├── 02_outliers.ipynb    # valores atípicos y justificación de la limpieza
-│   └── 03_variables_y_agrupaciones.ipynb  # variables nuevas, groupby y pivot_table
+│   ├── 03_variables_y_agrupaciones.ipynb  # variables nuevas, groupby y pivot_table
+│   └── 04_correlaciones_y_tendencias.ipynb # correlaciones, desfases y tendencias
 ├── src/
 │   ├── limpieza.py          # funciones de carga y limpieza
 │   ├── variables.py         # variables derivadas (ola, región, positividad, letalidad)
@@ -61,7 +62,7 @@ jupyter notebook notebooks/01_eda_covid.ipynb
 
 Después: *Kernel → Restart & Run All*. También puede abrirse en VS Code seleccionando el intérprete de `.venv`.
 
-Los notebooks se ejecutan **en orden** (01, 02, 03...): cada uno guarda en `data/processed/` los datos que usa el
+Los notebooks se ejecutan **en orden** (01, 02, 03, 04...): cada uno guarda en `data/processed/` los datos que usa el
 siguiente.
 
 Para ejecutarlos enteros sin abrirlos:
@@ -70,6 +71,7 @@ Para ejecutarlos enteros sin abrirlos:
 jupyter nbconvert --to notebook --execute --inplace notebooks/01_eda_covid.ipynb
 jupyter nbconvert --to notebook --execute --inplace notebooks/02_outliers.ipynb
 jupyter nbconvert --to notebook --execute --inplace notebooks/03_variables_y_agrupaciones.ipynb
+jupyter nbconvert --to notebook --execute --inplace notebooks/04_correlaciones_y_tendencias.ipynb
 ```
 
 ## Qué hay en el análisis
@@ -93,6 +95,10 @@ jupyter nbconvert --to notebook --execute --inplace notebooks/03_variables_y_agr
    - Año, mes y semana; ola (cortada en los valles de la curva); región del Census Bureau.
    - Tasa de positividad de 7 días y letalidad aparente.
    - Resúmenes por ola, región y estado con `groupby` y `agg`, y `pivot_table` de positividad por región y mes.
+7. **Correlaciones y tendencias** (notebook 04):
+   - Matriz de correlación calculada dentro de cada estado (y por qué no mezclando todas las filas) con mapa de calor.
+   - Desfases entre casos, hospitalizados y muertes.
+   - Tendencias nacionales, orden de las variables en la ola de invierno, positividad por región y cuatro estados.
 
 ## Conclusiones principales
 
@@ -109,6 +115,8 @@ jupyter nbconvert --to notebook --execute --inplace notebooks/03_variables_y_agr
   los casos del verano, y la ola de otoño-invierno se repartió por todo el país casi en proporción a la población.
 - **Letalidad aparente:** bajó del 5,8 % (mayo de 2020) a menos del 2 %, sobre todo porque al principio se hacían
   pocos tests y solo se detectaban los casos graves.
+- **Cadena casos → hospitalizados → muertes:** dentro de cada estado, los hospitalizados siguen a los casos en unos
+  3 días y las muertes a los hospitalizados en unos 11. Los hospitalizados son el mejor aviso de las muertes.
 
 ## Limitaciones
 
