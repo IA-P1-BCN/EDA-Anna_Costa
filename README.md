@@ -17,6 +17,15 @@ El enunciado del proyecto está en [docs/ENUNCIADO.md](docs/ENUNCIADO.md).
   Washington D. C. y 5 territorios), del 13-01-2020 al 07-03-2021. Recoge casos, tests, hospitalizaciones
   y fallecimientos, tanto acumulados como diarios.
 
+**Segunda fuente, población por estado** (notebook 05):
+
+- **Fuente:** [US Census Bureau, Population Estimates Program](https://www.census.gov/programs-surveys/popest.html),
+  *Annual Estimates of the Resident Population for the United States, Regions, States, District of Columbia, and
+  Puerto Rico* (serie 2020-2023, Vintage 2023). Datos públicos del Gobierno de Estados Unidos.
+- **Descarga:** `https://www2.census.gov/programs-surveys/popest/datasets/2020-2023/state/totals/NST-EST2023-ALLDATA.csv`
+- **Uso:** población a 1 de julio de 2020 (`POPESTIMATE2020`), unida a los datos de COVID por código FIPS para
+  calcular tasas por cada 100.000 habitantes.
+
 No hace falta descargar nada a mano: la primera vez que se ejecuta, el notebook baja el CSV a `data/raw/` y
 guarda la versión limpia en `data/processed/`. Las dos carpetas están en `.gitignore`.
 
@@ -27,10 +36,12 @@ guarda la versión limpia en `data/processed/`. Las dos carpetas están en `.git
 │   ├── 01_eda_covid.ipynb   # carga, limpieza y análisis básico
 │   ├── 02_outliers.ipynb    # valores atípicos y justificación de la limpieza
 │   ├── 03_variables_y_agrupaciones.ipynb  # variables nuevas, groupby y pivot_table
-│   └── 04_correlaciones_y_tendencias.ipynb # correlaciones, desfases y tendencias
+│   ├── 04_correlaciones_y_tendencias.ipynb # correlaciones, desfases y tendencias
+│   └── 05_normalizar_poblacion.ipynb       # población del Census Bureau y tasas por 100.000 habitantes
 ├── src/
 │   ├── limpieza.py          # funciones de carga y limpieza
 │   ├── variables.py         # variables derivadas (ola, región, positividad, letalidad)
+│   ├── poblacion.py         # carga de la población y unión por código FIPS
 │   ├── graficos.py          # estilo común de los gráficos
 │   └── informe.py           # genera el informe ejecutivo en PDF
 ├── reports/
@@ -69,7 +80,7 @@ jupyter notebook notebooks/01_eda_covid.ipynb
 
 Después: *Kernel → Restart & Run All*. También puede abrirse en VS Code seleccionando el intérprete de `.venv`.
 
-Los notebooks se ejecutan **en orden** (01, 02, 03, 04...): cada uno guarda en `data/processed/` los datos que usa el
+Los notebooks se ejecutan **en orden** (01, 02, 03, 04, 05...): cada uno guarda en `data/processed/` los datos que usa el
 siguiente.
 
 Para ejecutarlos enteros sin abrirlos:
@@ -79,6 +90,7 @@ jupyter nbconvert --to notebook --execute --inplace notebooks/01_eda_covid.ipynb
 jupyter nbconvert --to notebook --execute --inplace notebooks/02_outliers.ipynb
 jupyter nbconvert --to notebook --execute --inplace notebooks/03_variables_y_agrupaciones.ipynb
 jupyter nbconvert --to notebook --execute --inplace notebooks/04_correlaciones_y_tendencias.ipynb
+jupyter nbconvert --to notebook --execute --inplace notebooks/05_normalizar_poblacion.ipynb
 ```
 
 El informe ejecutivo se genera después de los notebooks 01 a 03 (todas sus cifras se calculan a partir de los datos):
@@ -112,6 +124,11 @@ python -m src.informe
    - Matriz de correlación calculada dentro de cada estado (y por qué no mezclando todas las filas) con mapa de calor.
    - Desfases entre casos, hospitalizados y muertes.
    - Tendencias nacionales, orden de las variables en la ola de invierno, positividad por región y cuatro estados.
+8. **Normalizar por población** (notebook 05):
+   - Población por estado del US Census Bureau, unida con `merge` por código FIPS y comprobación de que no se
+     pierden filas ni estados.
+   - Casos, muertes y máximo de hospitalizados por cada 100.000 habitantes.
+   - Ranking de estados absoluto frente a ranking por habitante, y muertes por habitante de cada región en cada ola.
 
 ## Conclusiones principales
 
@@ -130,10 +147,16 @@ python -m src.informe
   pocos tests y solo se detectaban los casos graves.
 - **Cadena casos → hospitalizados → muertes:** dentro de cada estado, los hospitalizados siguen a los casos en unos
   3 días y las muertes a los hospitalizados en unos 11. Los hospitalizados son el mejor aviso de las muertes.
+- **Por habitante, el ranking cambia:** el de muertes absolutas sigue casi al de población (Spearman 0,94).
+  Por cada 100.000 habitantes, California, Texas y Florida bajan a mitad de tabla y Nueva Jersey es el estado con
+  más muertes (254), seguido de Massachusetts y Rhode Island. En la primavera de 2020 el Noreste tuvo unas 100
+  muertes por cada 100.000 habitantes, una cifra comparable a la de cada región en toda la ola de otoño-invierno
+  (entre 89 y 112).
 
 ## Limitaciones
 
-- Las cifras aún no están normalizadas por población.
+- La población es la de 1 de julio de 2020 para todo el periodo, y no hay datos por edad: no se puede saber si un
+  estado tuvo más muertes por habitante porque su población es más mayor.
 - En la primavera de 2020 se hacían pocos tests, así que los casos de la primera ola están infracontados.
 - Cada estado medía los tests y las hospitalizaciones a su manera: unos cuentan personas y otros muestras, así que
   la positividad no se puede comparar entre estados con distinta forma de contar.
