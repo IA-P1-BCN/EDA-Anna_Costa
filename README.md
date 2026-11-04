@@ -22,9 +22,11 @@ guarda la versión limpia en `data/processed/`. Las dos carpetas están en `.git
 ```text
 ├── notebooks/
 │   ├── 01_eda_covid.ipynb   # carga, limpieza y análisis básico
-│   └── 02_outliers.ipynb    # valores atípicos y justificación de la limpieza
+│   ├── 02_outliers.ipynb    # valores atípicos y justificación de la limpieza
+│   └── 03_variables_y_agrupaciones.ipynb  # variables nuevas, groupby y pivot_table
 ├── src/
 │   ├── limpieza.py          # funciones de carga y limpieza
+│   ├── variables.py         # variables derivadas (ola, región, positividad, letalidad)
 │   └── graficos.py          # estilo común de los gráficos
 ├── data/                    # se crea al ejecutar (no se sube al repositorio)
 │   ├── raw/
@@ -59,7 +61,7 @@ jupyter notebook notebooks/01_eda_covid.ipynb
 
 Después: *Kernel → Restart & Run All*. También puede abrirse en VS Code seleccionando el intérprete de `.venv`.
 
-Los notebooks se ejecutan **en orden** (01, 02...): cada uno guarda en `data/processed/` los datos que usa el
+Los notebooks se ejecutan **en orden** (01, 02, 03...): cada uno guarda en `data/processed/` los datos que usa el
 siguiente.
 
 Para ejecutarlos enteros sin abrirlos:
@@ -67,6 +69,7 @@ Para ejecutarlos enteros sin abrirlos:
 ```bash
 jupyter nbconvert --to notebook --execute --inplace notebooks/01_eda_covid.ipynb
 jupyter nbconvert --to notebook --execute --inplace notebooks/02_outliers.ipynb
+jupyter nbconvert --to notebook --execute --inplace notebooks/03_variables_y_agrupaciones.ipynb
 ```
 
 ## Qué hay en el análisis
@@ -86,6 +89,10 @@ jupyter nbconvert --to notebook --execute --inplace notebooks/02_outliers.ipynb
    - IQR por estado: la mayoría de los atípicos son los picos de la ola de invierno.
    - Detección de atrasos de notificación (picos aislados) y qué hacer con cada tipo.
    - Repaso de todas las decisiones de limpieza con sus alternativas.
+6. **Variables nuevas y agrupaciones** (notebook 03):
+   - Año, mes y semana; ola (cortada en los valles de la curva); región del Census Bureau.
+   - Tasa de positividad de 7 días y letalidad aparente.
+   - Resúmenes por ola, región y estado con `groupby` y `agg`, y `pivot_table` de positividad por región y mes.
 
 ## Conclusiones principales
 
@@ -98,9 +105,14 @@ jupyter nbconvert --to notebook --execute --inplace notebooks/02_outliers.ipynb
 - **Atípicos:** casi 9 de cada 10 días atípicos de un estado caen en la ola de invierno y son reales. Los
   problemáticos son los atrasos de notificación (por ejemplo, 2.559 muertes en Ohio el 12-02-2021): se mantienen
   y se marcan. Los hospitalizados nuevos acumulan tantos saltos que no se usan.
+- **Cada ola tuvo su zona:** el Noreste concentró el 53 % de las muertes de la primavera de 2020, el Sur el 55 % de
+  los casos del verano, y la ola de otoño-invierno se repartió por todo el país casi en proporción a la población.
+- **Letalidad aparente:** bajó del 5,8 % (mayo de 2020) a menos del 2 %, sobre todo porque al principio se hacían
+  pocos tests y solo se detectaban los casos graves.
 
 ## Limitaciones
 
 - Las cifras aún no están normalizadas por población.
 - En la primavera de 2020 se hacían pocos tests, así que los casos de la primera ola están infracontados.
-- Cada estado medía los tests y las hospitalizaciones a su manera.
+- Cada estado medía los tests y las hospitalizaciones a su manera: unos cuentan personas y otros muestras, así que
+  la positividad no se puede comparar entre estados con distinta forma de contar.
