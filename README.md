@@ -8,6 +8,8 @@ El enunciado del proyecto está en [docs/ENUNCIADO.md](docs/ENUNCIADO.md).
 **Informe ejecutivo** (2 páginas, para público no técnico):
 [reports/informe_ejecutivo.pdf](reports/informe_ejecutivo.pdf).
 
+**Gráficos interactivos** (regiones y olas, se abren en el navegador): [reports/interactivos/](reports/interactivos/).
+
 ## Datos
 
 - **Fuente:** [The COVID Tracking Project](https://covidtracking.com/data/download) (The Atlantic), licencia
@@ -38,7 +40,8 @@ guarda la versión limpia en `data/processed/`. Las dos carpetas están en `.git
 │   ├── 03_variables_y_agrupaciones.ipynb  # variables nuevas, groupby y pivot_table
 │   ├── 04_correlaciones_y_tendencias.ipynb # correlaciones, desfases y tendencias
 │   ├── 05_normalizar_poblacion.ipynb       # población del Census Bureau y tasas por 100.000 habitantes
-│   └── 06_calidad_y_transformaciones.ipynb # datos dudosos, media móvil y escala logarítmica
+│   ├── 06_calidad_y_transformaciones.ipynb # datos dudosos, media móvil y escala logarítmica
+│   └── 07_segmentos_plotly.ipynb           # regiones y olas con gráficos interactivos
 ├── src/
 │   ├── limpieza.py          # funciones de carga y limpieza
 │   ├── variables.py         # variables derivadas (ola, región, positividad, letalidad)
@@ -46,10 +49,12 @@ guarda la versión limpia en `data/processed/`. Las dos carpetas están en `.git
 │   ├── calidad.py           # reglas de coherencia, correcciones y días sin publicar
 │   ├── transformaciones.py  # media móvil, efecto del día de la semana y logaritmo
 │   ├── graficos.py          # estilo común de los gráficos
+│   ├── interactivos.py      # colores por región y estilo de los gráficos de plotly
 │   └── informe.py           # genera el informe ejecutivo en PDF
 ├── reports/
 │   ├── informe_ejecutivo.pdf
-│   └── figuras/             # gráficos del informe
+│   ├── figuras/             # gráficos del informe
+│   └── interactivos/        # gráficos de plotly en HTML
 ├── data/                    # se crea al ejecutar (no se sube al repositorio)
 │   ├── raw/
 │   └── processed/
@@ -83,7 +88,7 @@ jupyter notebook notebooks/01_eda_covid.ipynb
 
 Después: *Kernel → Restart & Run All*. También puede abrirse en VS Code seleccionando el intérprete de `.venv`.
 
-Los notebooks se ejecutan **en orden** (01, 02, 03, 04, 05, 06...): cada uno guarda en `data/processed/` los datos que usa el
+Los notebooks se ejecutan **en orden** (01, 02, 03, 04, 05, 06, 07...): cada uno guarda en `data/processed/` los datos que usa el
 siguiente.
 
 Para ejecutarlos enteros sin abrirlos:
@@ -95,6 +100,7 @@ jupyter nbconvert --to notebook --execute --inplace notebooks/03_variables_y_agr
 jupyter nbconvert --to notebook --execute --inplace notebooks/04_correlaciones_y_tendencias.ipynb
 jupyter nbconvert --to notebook --execute --inplace notebooks/05_normalizar_poblacion.ipynb
 jupyter nbconvert --to notebook --execute --inplace notebooks/06_calidad_y_transformaciones.ipynb
+jupyter nbconvert --to notebook --execute --inplace notebooks/07_segmentos_plotly.ipynb
 ```
 
 El informe ejecutivo se genera después de los notebooks 01 a 03 (todas sus cifras se calculan a partir de los datos):
@@ -139,6 +145,13 @@ python -m src.informe
    - Días sin publicar (ceros que no son ceros) y efecto del día de la semana.
    - Media móvil de 7 días y escala logarítmica, con su justificación, y tabla con el tratamiento de cada tipo de
      dato dudoso.
+10. **Regiones y olas con `plotly`** (notebook 07):
+    - Mapa de las cuatro regiones del Census Bureau.
+    - Casos, hospitalizados y muertes por habitante de cada región en el tiempo, con botones para cambiar de
+      variable y zoom.
+    - Mapa de muertes por habitante de cada estado con un botón por ola.
+    - Estados de cada región por ola (cajas con un punto por estado) y tabla resumen con tests, positividad y
+      letalidad aparente.
 
 ## Conclusiones principales
 
@@ -166,6 +179,10 @@ python -m src.informe
   tests, todas en marzo de 2020 o antes). Lo que más distorsiona es el calendario de publicación: 562 días con 0
   casos en estados con miles de casos y muertes del lunes al 55 % de lo normal. Por eso las series se ven con
   media de 7 días.
+- **Regiones:** el Medio Oeste fue el primero en la ola de otoño-invierno (pico de casos el 19-11-2020, casi dos
+  meses antes que el resto). Dentro de cada región hay mucha variedad: en la primavera de 2020, Nueva Jersey
+  tuvo 151 muertes por 100.000 habitantes y Maine, 7. En invierno, el Noreste hizo el doble de tests por
+  habitante que el Sur, con la mitad de positividad.
 
 ## Limitaciones
 
