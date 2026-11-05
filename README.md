@@ -58,8 +58,10 @@ guarda la versión limpia en `data/processed/`. Las dos carpetas están en `.git
 ├── data/                    # se crea al ejecutar (no se sube al repositorio)
 │   ├── raw/
 │   └── processed/
+├── tests/                   # tests de las funciones de src/ (pytest)
 ├── docs/
 │   └── ENUNCIADO.md
+├── pyproject.toml           # configuración de pytest
 └── requirements.txt
 ```
 
@@ -108,6 +110,21 @@ El informe ejecutivo se genera después de los notebooks 01 a 03 (todas sus cifr
 ```bash
 python -m src.informe
 ```
+
+## Tests
+
+Las funciones de `src/` (carga, limpieza, calidad, población, variables y transformaciones) tienen tests
+automáticos con `pytest`. Usan datos pequeños inventados dentro de los propios tests, así que no necesitan
+descargar nada ni haber ejecutado los notebooks. Desde la raíz del repositorio y con el entorno activado:
+
+```bash
+pytest
+```
+
+Para ver el nombre de cada test: `pytest -v`. Tienen que pasar todos antes de subir cambios.
+
+`validar_limpios()` (en `src/limpieza.py`) se escribió primero como test y después como función: comprueba que los
+datos limpios no tienen filas repetidas, incrementos negativos ni días que falten.
 
 ## Qué hay en el análisis
 

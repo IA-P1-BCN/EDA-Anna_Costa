@@ -129,3 +129,39 @@ def limpiar(df_crudo: pd.DataFrame) -> pd.DataFrame:
     df = marcar_territorios(df)
     df = marcar_atrasos(df)
     return df.sort_values(["estado", "fecha"]).reset_index(drop=True)
+
+
+COLUMNAS_LIMPIOS = [*COLUMNAS.values(), "es_correccion", "es_territorio", *COLUMNAS_ATRASO.values()]
+
+
+def validar_limpios(df: pd.DataFrame) -> pd.DataFrame:
+    """Comprueba las reglas que el resto del análisis da por hechas sobre los datos limpios.
+
+    - Están todas las columnas que deja `limpiar()`.
+    - No hay dos filas del mismo estado y día.
+    - No quedan incrementos diarios negativos (las correcciones ya deben ser NaN).
+    - Cada estado tiene todos los días entre su primera y su última fecha.
+
+    Lanza ValueError con todos los problemas encontrados; si no hay ninguno, devuelve los datos sin cambios.
+    """
+    faltan = [columna for columna in COLUMNAS_LIMPIOS if columna not in df.columns]
+    if faltan:
+        raise ValueError("Faltan columnas: " + ", ".join(faltan))
+
+    problemas = []
+    repetidas = df.duplicated(["estado", "fecha"]).sum()
+    if repetidas:
+        problemas.append(f"{repetidas} filas repetidas (mismo estado y día)")
+
+    negativos = (df[COLUMNAS_INCREMENTO] < 0).sum()
+    for columna, cuantos in negativos[negativos > 0].items():
+        problemas.append(f"{cuantos} incrementos negativos en {columna}")
+
+    dias = df.drop_duplicates(["estado", "fecha"]).groupby("estado")["fecha"].agg(["min", "max", "size"])
+    huecos = dias[(dias["max"] - dias["min"]).dt.days + 1 != dias["size"]]
+    if len(huecos):
+        problemas.append("faltan días en: " + ", ".join(huecos.index))
+
+    if problemas:
+        raise ValueError("Los datos limpios no son válidos: " + "; ".join(problemas))
+    return df
