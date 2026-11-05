@@ -11,6 +11,9 @@ El enunciado del proyecto está en [docs/ENUNCIADO.md](docs/ENUNCIADO.md).
 **Informe de calidad de datos** (qué faltaba, qué se corrigió y qué quedó pendiente, con cifras):
 [reports/informe_calidad.md](reports/informe_calidad.md).
 
+**Presentación del hallazgo principal** (5 minutos, para público no técnico):
+[reports/presentacion.pdf](reports/presentacion.pdf).
+
 **Gráficos interactivos** (regiones y olas, se abren en el navegador): [reports/interactivos/](reports/interactivos/).
 
 ## Datos
@@ -55,11 +58,13 @@ guarda la versión limpia en `data/processed/`. Las dos carpetas están en `.git
 │   ├── graficos.py          # estilo común de los gráficos
 │   ├── interactivos.py      # colores por región y estilo de los gráficos de plotly
 │   ├── dashboard.py         # filtros y tablas del dashboard
+│   ├── presentacion.py      # genera la presentación
 │   ├── informe.py           # genera el informe ejecutivo en PDF
 │   └── informe_calidad.py   # genera el informe de calidad de datos
 ├── reports/
 │   ├── informe_ejecutivo.pdf
 │   ├── informe_calidad.md
+│   ├── presentacion.pdf     # diapositivas de la presentación (16:9)
 │   ├── figuras/             # gráficos del informe
 │   └── interactivos/        # gráficos de plotly en HTML
 ├── data/                    # se crea al ejecutar (no se sube al repositorio)
@@ -146,6 +151,14 @@ El informe de calidad de datos también calcula todas sus cifras. Lee los origin
 
 ```bash
 python -m src.informe_calidad
+```
+
+La presentación también calcula todas sus cifras, y en la consola muestra cuánto se tarda en contar cada
+diapositiva, para ensayar con cronómetro.
+Si no existen los datos procesados, ejecuta antes el pipeline:
+
+```bash
+python -m src.presentacion
 ```
 
 ## Dashboard
