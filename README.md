@@ -8,6 +8,9 @@ El enunciado del proyecto está en [docs/ENUNCIADO.md](docs/ENUNCIADO.md).
 **Informe ejecutivo** (2 páginas, para público no técnico):
 [reports/informe_ejecutivo.pdf](reports/informe_ejecutivo.pdf).
 
+**Informe de calidad de datos** (qué faltaba, qué se corrigió y qué quedó pendiente, con cifras):
+[reports/informe_calidad.md](reports/informe_calidad.md).
+
 **Gráficos interactivos** (regiones y olas, se abren en el navegador): [reports/interactivos/](reports/interactivos/).
 
 ## Datos
@@ -51,9 +54,11 @@ guarda la versión limpia en `data/processed/`. Las dos carpetas están en `.git
 │   ├── transformaciones.py  # media móvil, efecto del día de la semana y logaritmo
 │   ├── graficos.py          # estilo común de los gráficos
 │   ├── interactivos.py      # colores por región y estilo de los gráficos de plotly
-│   └── informe.py           # genera el informe ejecutivo en PDF
+│   ├── informe.py           # genera el informe ejecutivo en PDF
+│   └── informe_calidad.py   # genera el informe de calidad de datos
 ├── reports/
 │   ├── informe_ejecutivo.pdf
+│   ├── informe_calidad.md
 │   ├── figuras/             # gráficos del informe
 │   └── interactivos/        # gráficos de plotly en HTML
 ├── data/                    # se crea al ejecutar (no se sube al repositorio)
@@ -131,6 +136,13 @@ los datos):
 
 ```bash
 python -m src.informe
+```
+
+El informe de calidad de datos también calcula todas sus cifras. Lee los originales de `data/raw/`
+(si faltan, los descarga), así que no hace falta ejecutar nada antes:
+
+```bash
+python -m src.informe_calidad
 ```
 
 ## Tests
