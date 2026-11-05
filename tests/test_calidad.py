@@ -4,12 +4,19 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.calidad import (comprobar_incrementos, diferencia_totales, marcar_ceros_sin_publicar, resumir_correcciones,
-                         resumir_marcas, revisar_coherencia, tratar_calidad)
+from src.calidad import (
+    comprobar_incrementos,
+    diferencia_totales,
+    marcar_ceros_sin_publicar,
+    resumir_correcciones,
+    resumir_marcas,
+    revisar_coherencia,
+    tratar_calidad,
+)
 
 
-@pytest.fixture
-def datos():
+@pytest.fixture(name="datos")
+def fixture_datos():
     """Dos estados, tres días, con una incoherencia de cada tipo en NY."""
     return pd.DataFrame({
         "estado": ["NY"] * 3 + ["VT"] * 3,
@@ -22,12 +29,15 @@ def datos():
         "tests_nuevos": [20, 2980, 100, 10, 10, 10],
         "hospitalizados_actuales": [5, 50, 60, np.nan, 1, 1],
         "uci_actuales": [1, 10, 8, np.nan, np.nan, np.nan],
-        "ventilador_actuales": [0, 12, 4, np.nan, np.nan, np.nan],   # NY 02-03: más respirador que UCI
-        "recuperados": [np.nan, 1495, np.nan, np.nan, np.nan, np.nan],  # NY 02-03: 1495 + 10 > 1500
+        # NY 02-03: más respirador que UCI
+        "ventilador_actuales": [0, 12, 4, np.nan, np.nan, np.nan],
+        # NY 02-03: 1495 recuperados + 10 muertes > 1500 casos
+        "recuperados": [np.nan, 1495, np.nan, np.nan, np.nan, np.nan],
     })
 
 
 def test_revisar_coherencia_marca_cada_regla(datos):
+    """Cada fila imposible se marca en la regla que incumple, y solo en esa."""
     marcas = revisar_coherencia(datos)
 
     assert marcas["positivos_sobre_tests"].tolist() == [True, False, False, False, False, False]
@@ -38,13 +48,15 @@ def test_revisar_coherencia_marca_cada_regla(datos):
 
 
 def test_revisar_coherencia_no_marca_las_filas_sin_dato(datos):
+    """Un dato que falta (NaN) no incumple ninguna regla."""
     marcas = revisar_coherencia(datos)
 
-    # VT no tiene UCI ni respirador: un NaN no incumple ninguna regla.
+    # VT no tiene UCI ni respirador.
     assert not marcas.loc[datos["estado"] == "VT"].any().any()
 
 
 def test_resumir_marcas(datos):
+    """El resumen cuenta las filas de cada regla y nombra los estados con más."""
     resumen = resumir_marcas(datos, revisar_coherencia(datos))
 
     assert resumen.loc["positivos_sobre_tests", "filas"] == 1
@@ -53,13 +65,16 @@ def test_resumir_marcas(datos):
 
 
 def test_comprobar_incrementos_coherentes(datos):
+    """Si los incrementos cuadran con los acumulados, no hay diferencias."""
     tabla = comprobar_incrementos(datos)
 
     assert (tabla["no_coinciden"] == 0).all()
-    assert tabla.loc["casos_nuevos", "filas_comparadas"] == 4   # el primer día de cada estado no tiene anterior
+    # El primer día de cada estado no tiene día anterior con el que comparar.
+    assert tabla.loc["casos_nuevos", "filas_comparadas"] == 4
 
 
 def test_comprobar_incrementos_detecta_un_incremento_que_no_cuadra(datos):
+    """Un incremento distinto de la diferencia de acumulados se cuenta."""
     datos.loc[1, "casos_nuevos"] = 999
     tabla = comprobar_incrementos(datos)
 
@@ -67,6 +82,7 @@ def test_comprobar_incrementos_detecta_un_incremento_que_no_cuadra(datos):
 
 
 def test_comprobar_incrementos_cuenta_los_acumulados_que_bajan(datos):
+    """Un acumulado que baja se cuenta aparte, no como incremento erróneo."""
     datos.loc[2, "muertes_acum"] = 8
     datos.loc[2, "muertes_nuevas"] = -2
     tabla = comprobar_incrementos(datos)
@@ -76,6 +92,7 @@ def test_comprobar_incrementos_cuenta_los_acumulados_que_bajan(datos):
 
 
 def test_resumir_correcciones():
+    """Cuenta las correcciones, cuánto restan y qué estado resta más."""
     crudo = pd.DataFrame({
         "estado": ["MA", "MA", "PA"],
         "fecha": pd.to_datetime(["2020-09-01", "2020-09-02", "2020-04-23"]),
@@ -89,6 +106,7 @@ def test_resumir_correcciones():
 
 
 def test_diferencia_totales_compara_con_el_ultimo_acumulado():
+    """Compara la suma de incrementos con el último acumulado de cada estado."""
     df = pd.DataFrame({
         "estado": ["NY"] * 3,
         "fecha": pd.to_datetime(["2020-03-01", "2020-03-02", "2020-03-03"]),
@@ -104,6 +122,7 @@ def test_diferencia_totales_compara_con_el_ultimo_acumulado():
 
 
 def test_marcar_ceros_sin_publicar(datos):
+    """Un 0 se marca solo si el estado ya llevaba al menos 1.000 casos."""
     ceros = marcar_ceros_sin_publicar(datos)
 
     # Solo el 0 de NY, que ya llevaba 1.500 casos. VT nunca llega a 1.000.
@@ -111,9 +130,14 @@ def test_marcar_ceros_sin_publicar(datos):
 
 
 def test_tratar_calidad_marca_y_vacia_los_tests_imposibles(datos):
+    """Añade las marcas y vacía los tests imposibles, sin tocar el resto."""
     df = tratar_calidad(datos)
 
-    for marca in ["positivos_sobre_tests", "ventilador_sobre_uci", "recuperados_sobre_casos", "cero_sin_publicar"]:
+    marcas = [
+        "positivos_sobre_tests", "ventilador_sobre_uci",
+        "recuperados_sobre_casos", "cero_sin_publicar",
+    ]
+    for marca in marcas:
         assert df[marca].dtype == bool
     assert np.isnan(df.loc[0, "tests_nuevos"])
     assert np.isnan(df.loc[0, "tests_acum"])

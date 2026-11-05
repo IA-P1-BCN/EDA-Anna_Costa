@@ -7,9 +7,9 @@ import pytest
 from src.limpieza import COLUMNAS
 
 
-@pytest.fixture
-def crudo():
-    """Imita el CSV original de The COVID Tracking Project (nombres en inglés, fecha como entero)."""
+@pytest.fixture(name="crudo")
+def fixture_crudo():
+    """Imita el CSV de The COVID Tracking Project: columnas en inglés y fecha como entero."""
     return pd.DataFrame({
         "date": [20200301, 20200302, 20200303] * 3,
         "state": ["NY"] * 3 + ["VT"] * 3 + ["GU"] * 3,
@@ -30,16 +30,16 @@ def crudo():
     })
 
 
-@pytest.fixture
-def renombrado(crudo):
+@pytest.fixture(name="renombrado")
+def fixture_renombrado(crudo):
     """El mismo ejemplo con las columnas ya en castellano y la fecha convertida."""
     df = crudo[list(COLUMNAS)].rename(columns=COLUMNAS)
     df["fecha"] = pd.to_datetime(df["fecha"].astype(str), format="%Y%m%d")
     return df
 
 
-@pytest.fixture
-def serie_estado():
+@pytest.fixture(name="serie_estado")
+def fixture_serie_estado():
     """Fábrica: un estado con el mismo valor diario en casos, muertes y hospitalizados nuevos."""
     def hacer(estado: str, valores: list, desde: str = "2020-10-01") -> pd.DataFrame:
         fechas = pd.date_range(desde, periods=len(valores), freq="D")
