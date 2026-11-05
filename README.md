@@ -43,6 +43,7 @@ guarda la versión limpia en `data/processed/`. Las dos carpetas están en `.git
 │   ├── 06_calidad_y_transformaciones.ipynb # datos dudosos, media móvil y escala logarítmica
 │   └── 07_segmentos_plotly.ipynb           # regiones y olas con gráficos interactivos
 ├── src/
+│   ├── pipeline.py          # descarga, limpia y guarda los datos con un solo comando
 │   ├── limpieza.py          # funciones de carga y limpieza
 │   ├── variables.py         # variables derivadas (ola, región, positividad, letalidad)
 │   ├── poblacion.py         # carga de la población y unión por código FIPS
@@ -82,7 +83,27 @@ pip install -r requirements.txt
 
 ## Ejecución
 
-Desde la raíz del repositorio y con el entorno activado:
+Desde la raíz del repositorio y con el entorno activado, este comando descarga los datos originales, los limpia y
+guarda en `data/processed/` todo lo que leen los notebooks:
+
+```bash
+python -m src.pipeline
+```
+
+Si `data/raw/` está vacía, descarga los dos originales (The COVID Tracking Project y US Census Bureau); si ya están, los
+reutiliza. Para volver a descargarlos: `python -m src.pipeline --descargar`. Hace los mismos pasos que los notebooks, con
+las funciones de `src/`, y genera estos ficheros:
+
+| Fichero | Qué añade | Lo lee |
+| --- | --- | --- |
+| `covid_estados_limpio.csv` | datos limpios y validados con `validar_limpios()` | notebook 03 |
+| `covid_estados_variables.csv` | año, mes, semana, ola, región, positividad y letalidad | notebooks 04 y 05, informe |
+| `covid_estados_poblacion.csv` | población y tasas por cada 100.000 habitantes | notebook 06 |
+| `covid_estados_final.csv` | marcas de calidad y tests imposibles vacíos | notebook 07 |
+
+Si los datos limpios no pasan la validación, el pipeline se para sin escribir ningún fichero.
+
+Para abrir un notebook:
 
 ```bash
 jupyter notebook notebooks/01_eda_covid.ipynb
@@ -90,8 +111,8 @@ jupyter notebook notebooks/01_eda_covid.ipynb
 
 Después: *Kernel → Restart & Run All*. También puede abrirse en VS Code seleccionando el intérprete de `.venv`.
 
-Los notebooks se ejecutan **en orden** (01, 02, 03, 04, 05, 06, 07...): cada uno guarda en `data/processed/` los datos que usa el
-siguiente.
+Después del pipeline, cualquier notebook puede abrirse directamente. Sin él, los notebooks se ejecutan **en orden** (01, 02,
+03, 04, 05, 06, 07...): cada uno guarda en `data/processed/` los datos que usa el siguiente.
 
 Para ejecutarlos enteros sin abrirlos:
 
@@ -105,7 +126,8 @@ jupyter nbconvert --to notebook --execute --inplace notebooks/06_calidad_y_trans
 jupyter nbconvert --to notebook --execute --inplace notebooks/07_segmentos_plotly.ipynb
 ```
 
-El informe ejecutivo se genera después de los notebooks 01 a 03 (todas sus cifras se calculan a partir de los datos):
+El informe ejecutivo se genera después del pipeline o de los notebooks 01 a 03 (todas sus cifras se calculan a partir de
+los datos):
 
 ```bash
 python -m src.informe

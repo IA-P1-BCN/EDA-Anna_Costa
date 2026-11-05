@@ -4,7 +4,13 @@ import pandas as pd
 import pytest
 
 from src import poblacion as modulo
-from src.poblacion import cargar_poblacion, por_100k, preparar_poblacion, unir_poblacion
+from src.poblacion import (
+    cargar_poblacion,
+    por_100k,
+    preparar_poblacion,
+    tasas_100k_7d,
+    unir_poblacion,
+)
 
 
 @pytest.fixture(name="censo")
@@ -77,3 +83,22 @@ def test_por_100k():
     assert por_100k(50, 1_000_000) == pytest.approx(5)
     pd.testing.assert_series_equal(por_100k(pd.Series([10.0, 20.0]), pd.Series([1000.0, 2000.0])),
                                    pd.Series([1000.0, 1000.0]))
+
+
+def test_tasas_100k_7d_media_de_la_semana_por_estado():
+    """Media de 7 días dentro de cada estado, por 100.000 habitantes; sin población, NaN."""
+    df = pd.DataFrame({
+        "estado": ["A"] * 4 + ["B"] * 4,
+        "fecha": list(pd.date_range("2020-10-01", periods=4)) * 2,
+        "casos_nuevos": [10, 20, 30, 40, 1000, 1000, 1000, 1000],
+        "muertes_nuevas": [1] * 8,
+        "hospitalizados_actuales": [5] * 8,
+        "poblacion": [1_000_000] * 4 + [None] * 4,
+    })
+    tasas = tasas_100k_7d(df)
+
+    a = tasas[tasas["estado"] == "A"]
+    assert a["casos_100k_7d"].iloc[:3].isna().all()               # menos de 4 días con dato
+    assert a["casos_100k_7d"].iloc[3] == pytest.approx(2.5)       # (10+20+30+40)/4 por 1M -> 2,5
+    assert a["muertes_100k_7d"].iloc[3] == pytest.approx(0.1)
+    assert tasas.loc[tasas["estado"] == "B", "casos_100k_7d"].isna().all()
