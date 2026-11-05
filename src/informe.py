@@ -1,6 +1,7 @@
 """Genera el informe ejecutivo en PDF (reports/informe_ejecutivo.pdf).
 
-Uso, desde la raíz del repositorio y después de ejecutar los notebooks 01 a 03:
+Uso, desde la raíz del repositorio y después de ejecutar `python -m src.pipeline`
+(o los notebooks 01 a 03):
 
     python -m src.informe
 
