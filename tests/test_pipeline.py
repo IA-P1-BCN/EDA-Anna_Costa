@@ -8,28 +8,10 @@ import pytest
 from src import limpieza, pipeline, poblacion
 from src.pipeline import ORIGINALES, SALIDAS, ejecutar
 
-CENSO_CSV = (
-    "SUMLEV,STATE,NAME,POPESTIMATE2020\n"
-    "10,0,United States,331000000\n"
-    "40,36,New York,20000000\n"
-    "40,50,Vermont,600000\n"
-)
-
-
 @pytest.fixture(name="carpetas")
-def fixture_carpetas(tmp_path, crudo, monkeypatch):
+def fixture_carpetas(carpeta_raw, tmp_path):
     """data/raw/ con los dos originales ya descargados; data/processed/ todavía no existe."""
-    raw = tmp_path / "raw"
-    raw.mkdir()
-    crudo.to_csv(raw / ORIGINALES["covid"], index=False)
-    (raw / ORIGINALES["censo"]).write_bytes(CENSO_CSV.encode("latin-1"))
-
-    def no_descargar(*_args, **_kwargs):
-        pytest.fail("no debería descargar")
-
-    monkeypatch.setattr(limpieza.requests, "get", no_descargar)
-    monkeypatch.setattr(poblacion.requests, "get", no_descargar)
-    return raw, tmp_path / "processed"
+    return carpeta_raw, tmp_path / "processed"
 
 
 def test_genera_los_cuatro_ficheros(carpetas, crudo):
@@ -77,11 +59,12 @@ def test_no_escribe_nada_si_los_datos_no_son_validos(carpetas, crudo):
 def test_descargar_vuelve_a_bajar_los_originales(carpetas, crudo, monkeypatch):
     """Con descargar=True baja otra vez los dos ficheros aunque ya estén en data/raw/."""
     raw, processed = carpetas
+    censo = (raw / ORIGINALES["censo"]).read_bytes()
     descargas = []
 
     def get_falso(url, **_kwargs):
         descargas.append(url)
-        contenido = CENSO_CSV.encode("latin-1") if url == poblacion.URL_POBLACION else (
+        contenido = censo if url == poblacion.URL_POBLACION else (
             crudo.to_csv(index=False).encode("utf-8"))
         return SimpleNamespace(content=contenido, raise_for_status=lambda: None)
 

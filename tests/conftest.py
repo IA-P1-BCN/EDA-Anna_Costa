@@ -4,7 +4,17 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from src import limpieza, poblacion
 from src.limpieza import COLUMNAS
+from src.pipeline import ORIGINALES
+
+# Imita el CSV del US Census Bureau: el país (SUMLEV 10) y dos estados (SUMLEV 40). Guam no está.
+CENSO_CSV = (
+    "SUMLEV,STATE,NAME,POPESTIMATE2020\n"
+    "10,0,United States,331000000\n"
+    "40,36,New York,20000000\n"
+    "40,50,Vermont,600000\n"
+)
 
 
 @pytest.fixture(name="crudo")
@@ -48,3 +58,19 @@ def fixture_serie_estado():
             "casos_nuevos": valores, "muertes_nuevas": valores, "hospitalizados_nuevos": valores,
         })
     return hacer
+
+
+@pytest.fixture(name="carpeta_raw")
+def fixture_carpeta_raw(tmp_path, crudo, monkeypatch):
+    """data/raw/ con los dos originales ya descargados; si algo intenta descargar, el test falla."""
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    crudo.to_csv(raw / ORIGINALES["covid"], index=False)
+    (raw / ORIGINALES["censo"]).write_bytes(CENSO_CSV.encode("latin-1"))
+
+    def no_descargar(*_args, **_kwargs):
+        pytest.fail("no debería descargar")
+
+    monkeypatch.setattr(limpieza.requests, "get", no_descargar)
+    monkeypatch.setattr(poblacion.requests, "get", no_descargar)
+    return raw
