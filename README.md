@@ -54,6 +54,7 @@ guarda la versión limpia en `data/processed/`. Las dos carpetas están en `.git
 │   ├── transformaciones.py  # media móvil, efecto del día de la semana y logaritmo
 │   ├── graficos.py          # estilo común de los gráficos
 │   ├── interactivos.py      # colores por región y estilo de los gráficos de plotly
+│   ├── dashboard.py         # filtros y tablas del dashboard
 │   ├── informe.py           # genera el informe ejecutivo en PDF
 │   └── informe_calidad.py   # genera el informe de calidad de datos
 ├── reports/
@@ -67,6 +68,8 @@ guarda la versión limpia en `data/processed/`. Las dos carpetas están en `.git
 ├── tests/                   # tests de las funciones de src/ (pytest)
 ├── docs/
 │   └── ENUNCIADO.md
+├── app.py                   # dashboard interactivo (Streamlit)
+├── .streamlit/config.toml   # tema claro del dashboard
 ├── pyproject.toml           # configuración de pytest
 └── requirements.txt
 ```
@@ -144,6 +147,35 @@ El informe de calidad de datos también calcula todas sus cifras. Lee los origin
 ```bash
 python -m src.informe_calidad
 ```
+
+## Dashboard
+
+Un panel interactivo para explorar los datos sin tocar código: se filtra por región, estado y
+rango de fechas, y todas las cifras y gráficos se recalculan con la selección.
+
+- **Evolución:** casos, muertes u hospitalizados al día, con la media de 7 días.
+- **Ranking por habitante:** casos o muertes del periodo por cada 100.000 habitantes, por estado.
+- **Hospitalizados:** hospitalizados por cada 100.000 habitantes en cada región.
+- **Datos:** la tabla de la selección, que se puede descargar en CSV.
+
+Para abrirlo en local, desde la raíz del repositorio y con el entorno activado:
+
+```bash
+streamlit run app.py
+```
+
+Lee `data/processed/covid_estados_final.csv`. Si no existe, ejecuta antes el pipeline él mismo
+(la primera carga tarda unos segundos más).
+
+### Publicación
+
+El dashboard se publica gratis en [Streamlit Community Cloud](https://share.streamlit.io): *Create app*,
+repositorio `IA-P1-BCN/EDA-Anna_Costa`, rama `dev`, fichero `app.py` y Python 3.12 en
+*Advanced settings*. Al arrancar, el servidor descarga y prepara los datos con el pipeline.
+
+La app **se duerme sola cuando pasa 12 horas sin visitas**, y la primera visita la despierta
+(tarda un par de minutos en volver). No hay nada que la mantenga despierta: ni pings, ni tareas
+programadas, ni recargas automáticas en la página.
 
 ## Tests
 
