@@ -1,30 +1,41 @@
 """Tests de src/limpieza.py."""
 
+from types import SimpleNamespace
+
 import numpy as np
 import pandas as pd
 import pytest
 
 from src import limpieza
-from src.limpieza import (COLUMNAS, cargar_datos, convertir_fecha, limites_iqr, limpiar, marcar_atrasos,
-                          marcar_correcciones, marcar_territorios, media_vecinos, seleccionar_y_renombrar)
+from src.limpieza import (
+    COLUMNAS,
+    cargar_datos,
+    convertir_fecha,
+    limites_iqr,
+    limpiar,
+    marcar_atrasos,
+    marcar_correcciones,
+    marcar_territorios,
+    media_vecinos,
+    seleccionar_y_renombrar,
+)
 
 
-class RespuestaFalsa:
+def respuesta_falsa(contenido: bytes) -> SimpleNamespace:
     """Sustituye a la respuesta de requests: los tests no se conectan a internet."""
-
-    def __init__(self, contenido: bytes):
-        self.content = contenido
-
-    def raise_for_status(self):
-        pass
+    return SimpleNamespace(content=contenido, raise_for_status=lambda: None)
 
 
 # --- cargar_datos -------------------------------------------------------------------------------
 
 def test_cargar_datos_lee_el_fichero_local_sin_descargar(tmp_path, monkeypatch):
+    """Si el CSV ya está en disco, lo lee sin conectarse a internet."""
     ruta = tmp_path / "datos.csv"
     ruta.write_text("a,b\n1,2\n", encoding="utf-8")
-    monkeypatch.setattr(limpieza.requests, "get", lambda *a, **k: pytest.fail("no debería descargar"))
+    def no_descargar(*_args, **_kwargs):
+        pytest.fail("no debería descargar")
+
+    monkeypatch.setattr(limpieza.requests, "get", no_descargar)
 
     df = cargar_datos(ruta)
 
@@ -32,12 +43,13 @@ def test_cargar_datos_lee_el_fichero_local_sin_descargar(tmp_path, monkeypatch):
 
 
 def test_cargar_datos_descarga_y_guarda_si_no_existe(tmp_path, monkeypatch):
+    """Si el CSV no está, lo descarga una vez y lo guarda en la ruta pedida."""
     ruta = tmp_path / "raw" / "datos.csv"
     llamadas = []
 
-    def get_falso(url, timeout):
+    def get_falso(url, **_kwargs):
         llamadas.append(url)
-        return RespuestaFalsa(b"a,b\n3,4\n")
+        return respuesta_falsa(b"a,b\n3,4\n")
 
     monkeypatch.setattr(limpieza.requests, "get", get_falso)
 
@@ -51,6 +63,7 @@ def test_cargar_datos_descarga_y_guarda_si_no_existe(tmp_path, monkeypatch):
 # --- convertir_fecha y seleccionar_y_renombrar ---------------------------------------------------
 
 def test_convertir_fecha_pasa_el_entero_a_fecha():
+    """El entero 20200313 pasa a ser el día 13-03-2020."""
     df = convertir_fecha(pd.DataFrame({"date": [20200313, 20210307]}))
 
     assert pd.api.types.is_datetime64_any_dtype(df["date"])
@@ -58,6 +71,7 @@ def test_convertir_fecha_pasa_el_entero_a_fecha():
 
 
 def test_convertir_fecha_no_modifica_el_original():
+    """convertir_fecha() trabaja sobre una copia."""
     original = pd.DataFrame({"date": [20200313]})
     convertir_fecha(original)
 
@@ -65,6 +79,7 @@ def test_convertir_fecha_no_modifica_el_original():
 
 
 def test_seleccionar_y_renombrar_deja_solo_las_columnas_utiles_en_castellano(crudo):
+    """Quedan las columnas del análisis, con nombre en castellano y los valores intactos."""
     df = seleccionar_y_renombrar(crudo)
 
     assert list(df.columns) == list(COLUMNAS.values())
@@ -75,6 +90,7 @@ def test_seleccionar_y_renombrar_deja_solo_las_columnas_utiles_en_castellano(cru
 # --- marcar_correcciones y marcar_territorios ----------------------------------------------------
 
 def test_marcar_correcciones_pasa_los_negativos_a_nan_y_marca_la_fila(renombrado):
+    """Un incremento negativo pasa a NaN y su fila queda marcada como corrección."""
     df = marcar_correcciones(renombrado)
 
     fila = (df["estado"] == "NY") & (df["fecha"] == "2020-03-03")
@@ -84,6 +100,7 @@ def test_marcar_correcciones_pasa_los_negativos_a_nan_y_marca_la_fila(renombrado
 
 
 def test_marcar_correcciones_no_toca_los_acumulados_ni_los_positivos(renombrado):
+    """Los acumulados y los incrementos positivos no cambian."""
     df = marcar_correcciones(renombrado)
 
     pd.testing.assert_series_equal(df["casos_acum"], renombrado["casos_acum"])
@@ -92,6 +109,7 @@ def test_marcar_correcciones_no_toca_los_acumulados_ni_los_positivos(renombrado)
 
 
 def test_marcar_territorios(renombrado):
+    """Guam se marca como territorio; Nueva York y Vermont, no."""
     df = marcar_territorios(renombrado)
 
     assert df.loc[df["estado"] == "GU", "es_territorio"].all()
@@ -101,6 +119,7 @@ def test_marcar_territorios(renombrado):
 # --- limites_iqr y media_vecinos ------------------------------------------------------------------
 
 def test_limites_iqr():
+    """Con k = 1,5 los límites son Q1 - 1,5 * IQR y Q3 + 1,5 * IQR."""
     inferior, superior = limites_iqr(pd.Series([1, 2, 3, 4, 5]))
 
     # Q1 = 2, Q3 = 4, IQR = 2
@@ -109,12 +128,14 @@ def test_limites_iqr():
 
 
 def test_limites_iqr_con_otro_k():
+    """El multiplicador k se puede cambiar."""
     _, superior = limites_iqr(pd.Series([1, 2, 3, 4, 5]), k=3)
 
     assert superior == pytest.approx(10)
 
 
 def test_media_vecinos_no_cuenta_el_propio_dia():
+    """La media de los vecinos deja fuera el propio día."""
     vecinos = media_vecinos(pd.Series([1.0, 2.0, 30.0, 4.0, 5.0]), ventana=3)
 
     # El 30 no entra en su propia media: (2 + 4) / 2 = 3.
@@ -125,6 +146,7 @@ def test_media_vecinos_no_cuenta_el_propio_dia():
 
 
 def test_media_vecinos_ignora_los_nan():
+    """Los días sin dato no cuentan en la media de los vecinos."""
     vecinos = media_vecinos(pd.Series([1.0, np.nan, 5.0, 3.0, 1.0]), ventana=3)
 
     assert vecinos.iloc[2] == pytest.approx(3)   # (NaN, 3) -> solo cuenta el 3
@@ -133,6 +155,7 @@ def test_media_vecinos_ignora_los_nan():
 # --- marcar_atrasos -------------------------------------------------------------------------------
 
 def test_marcar_atrasos_marca_un_pico_aislado(serie_estado):
+    """Un día con 20 veces lo normal se marca como atraso."""
     valores = [10] * 30
     valores[15] = 200
     df = marcar_atrasos(serie_estado("OH", valores))
@@ -142,12 +165,14 @@ def test_marcar_atrasos_marca_un_pico_aislado(serie_estado):
 
 
 def test_marcar_atrasos_no_marca_una_subida_gradual(serie_estado):
+    """Una ola que crece poco a poco no es un atraso."""
     df = marcar_atrasos(serie_estado("TX", list(range(10, 400, 13))))
 
     assert not df["atraso_casos"].any()
 
 
 def test_marcar_atrasos_respeta_el_minimo_en_estados_pequenos(serie_estado):
+    """Un salto pequeño en valor absoluto no se marca aunque multiplique a sus vecinos."""
     valores = [1] * 30
     valores[15] = 6   # multiplica por 6 a sus vecinos, pero no llega al mínimo de 20
     df = marcar_atrasos(serie_estado("VT", valores))
@@ -156,6 +181,7 @@ def test_marcar_atrasos_respeta_el_minimo_en_estados_pequenos(serie_estado):
 
 
 def test_marcar_atrasos_compara_cada_estado_consigo_mismo(serie_estado):
+    """Lo que es normal en un estado grande puede ser un pico en uno pequeño."""
     # 200 sería normal en el estado grande, pero es un pico en el pequeño.
     grande = serie_estado("CA", [200] * 30)
     valores = [10] * 30
@@ -168,6 +194,7 @@ def test_marcar_atrasos_compara_cada_estado_consigo_mismo(serie_estado):
 
 
 def test_marcar_atrasos_no_cambia_los_valores(serie_estado):
+    """marcar_atrasos() solo añade la marca: los valores no cambian."""
     valores = [10] * 30
     valores[15] = 200
     df = marcar_atrasos(serie_estado("OH", valores))
@@ -178,10 +205,14 @@ def test_marcar_atrasos_no_cambia_los_valores(serie_estado):
 # --- limpiar --------------------------------------------------------------------------------------
 
 def test_limpiar_aplica_todos_los_pasos(crudo):
+    """limpiar() hace todos los pasos sin perder filas."""
     df = limpiar(crudo)
 
     assert len(df) == len(crudo)
-    for columna in ["fecha", "casos_nuevos", "es_correccion", "es_territorio", "atraso_casos", "atraso_muertes"]:
+    nuevas = [
+        "fecha", "casos_nuevos", "es_correccion", "es_territorio", "atraso_casos", "atraso_muertes",
+    ]
+    for columna in nuevas:
         assert columna in df.columns
     assert pd.api.types.is_datetime64_any_dtype(df["fecha"])
     assert df["es_correccion"].sum() == 1
@@ -189,6 +220,7 @@ def test_limpiar_aplica_todos_los_pasos(crudo):
 
 
 def test_limpiar_ordena_por_estado_y_fecha(crudo):
+    """El resultado sale ordenado por estado y fecha, con el índice de 0 a n."""
     df = limpiar(crudo.sample(frac=1, random_state=0))
 
     assert df["estado"].tolist() == ["GU"] * 3 + ["NY"] * 3 + ["VT"] * 3
