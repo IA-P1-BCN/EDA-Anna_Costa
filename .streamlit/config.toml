@@ -1,0 +1,17 @@
+[theme]
+primaryColor = "#1f77b4"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f0f2f6"
+textColor = "#333333"
+font = "sans serif"
+
+[browser.gatherUsageStats]
+# URL de la instancia Streamlit Cloud para enviar estadísticas de uso (opcional)
+url = ""
+
+[server]
+# Debug mode desactivado para producción
+headless = true
+port = 8501
+enableXsrfProtection = true
+enableCORS = false
