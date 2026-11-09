@@ -1,7 +1,8 @@
 """📊 COVID-19 Dashboard - Estados Unidos (2020-2021)
-Optimizado para despliegue en Streamlit Cloud
+Optimizado para despliegue en Streamlit Cloud.
 
-Este dashboard interactivo visualiza los datos de COVID-19 procesados desde The COVID Tracking Project.
+DESCARGA LOS DATOS AUTOMÁTICAMENTE desde URLs públicas de GitHub Raw.
+NO necesita archivos locales subidos al repositorio.
 
 🌐 Fuentes de datos:
    - The COVID Tracking Project (casos, muertes, hospitalizados)
@@ -13,7 +14,7 @@ Este dashboard interactivo visualiza los datos de COVID-19 procesados desde The 
    streamlit run app.py
 
 🌐 Para desplegar en Streamlit Cloud:
-   Sube este repositorio a GitHub (brama main) y conecta en https://streamlit.io/cloud
+   Sube este repositorio a GitHub y conecta en https://streamlit.io/cloud
 """
 
 import pandas as pd
@@ -42,122 +43,137 @@ Este dashboard interactivo muestra los datos de **COVID-19 en Estados Unidos** d
 """)
 
 # ============================================
-# CARGA DE DATOS
+# DESCARGA DE DATOS AUTOMÁTICA (NO NECESITA ARCHIVOS LOCALES)
 # ============================================
 
-@st.cache_data(show_spinner="Cargando datos COVID-19...")
-def cargar_datos_crudos():
-    """Carga los datos crudos desde data/raw/covid_states_daily.csv"""
+@st.cache_data(show_spinner="⏳ Descargando datos COVID-19 desde GitHub Raw...")
+def descargar_datos_github():
+    """
+    Descarga los datos directamente desde URLs públicas de GitHub.
+    No depende de archivos locales subidos al repositorio.
+    """
     
     try:
-        ruta_raw = Path("data/raw/covid_states_daily.csv")
-        if not ruta_raw.exists():
-            st.error(f"❌ ERROR CRÍTICO: No se encontró el archivo en: {ruta_raw}")
+        # URL oficial del dataset agregado por estado de COVID Tracking Project
+        url_covid = "https://raw.githubusercontent.com/COVIDTracking/covid_open_data_processing/master/data/aggregated_state_daily.csv"
+        
+        print(f"📥 Descargando datos desde: {url_covid[:80]}...")
+        
+        import requests
+        resp = requests.get(url_covid, timeout=30)
+        
+        if resp.status_code != 200:
+            st.error(f"❌ Error al descargar datos: HTTP {resp.status_code}")
             return None
         
-        df_cruo = pd.read_csv(ruta_raw)
-        print(f"✅ Cargado {len(df_cruo):,} registros desde {ruta_raw}")
+        # Leer el CSV desde la respuesta HTTP
+        df_cruo = pd.read_csv(resp.text)
+        
+        print(f"✅ Cargado {len(df_cruo):,} registros de COVID Tracking Project")
+        print(f"\n📊 Columnas principales: {df_cruo.columns.tolist()[:10]}...")
+        
         return df_cruo
         
     except Exception as e:
-        st.error(f"❌ Error al cargar datos: {e}")
+        st.error(f"❌ Error al descargar datos desde GitHub: {e}")
+        import traceback
+        st.code(traceback.format_exc())
         return None
 
-@st.cache_data(show_spinner="Preparando datos...")
-def preparar_datos(df_cruo):
-    """Prepara los datos para visualización"""
-    
-    if df_cruo is None:
-        return None
-    
-    try:
-        df = df_cruo.copy()
-        
-        # Asegurar tipos de datos
-        if "fecha" in df.columns:
-            df["fecha"] = pd.to_datetime(df["fecha"], errors='coerce')
-        
-        # Filtrar registros con fecha inválida
-        df = df[df["fecha"].notna()] if "fecha" in df.columns else df
-        
-        print(f"✅ Datos preparados: {len(df):,} registros válidos")
-        return df
-        
-    except Exception as e:
-        st.error(f"❌ Error en preprocesamiento: {e}")
-        return None
-
-@st.cache_data(show_spinner="Agregando datos de población...")
-def cargar_poblacion_census():
-    """Carga datos de población del Census (si están disponibles)"""
+@st.cache_data(show_spinner="⏳ Descargando datos de población del Census...")
+def descargar_poblacion_census():
+    """
+    Intenta descargar datos de población del Census (si están disponibles).
+    Si no, devuelve None y la app funcionará sin datos de población.
+    """
     
     try:
-        ruta_censo = Path("data/raw/poblacion_estados_census.csv")
-        if not ruta_censo.exists():
-            print("⚠️ Sin datos de población del Census")
+        # URL alternativa del dataset de población
+        url_censo = "https://raw.githubusercontent.com/US-Census-Bureau/population-datasets/master/state_population.csv"
+        
+        import requests
+        resp = requests.get(url_censo, timeout=30)
+        
+        if resp.status_code != 200:
+            print("⚠️ Datos de población no disponibles (opcional)")
             return None
         
-        censo_df = pd.read_csv(ruta_censo)
-        print(f"✅ Cargado {len(censo_df):,} registros de población desde {ruta_censo}")
+        censo_df = pd.read_csv(resp.text)
+        print(f"✅ Cargado {len(censo_df):,} registros de población del Census")
+        
         return censo_df
         
     except Exception as e:
-        print(f"⚠️ No se pudo cargar población del Census: {e}")
+        print(f"⚠️ No se pudo cargar población del Census (opcional): {e}")
         return None
 
-@st.cache_data(show_spinner="Cargando datos finales...")
-def cargar_final(df_cruo, censo):
-    """Combina datos COVID con población (si está disponible)"""
+@st.cache_data(show_spinner="⏳ Procesando datos finales...")
+def procesar_datos(df_cruo, censo=None):
+    """Procesa los datos COVID con o sin datos de población"""
     
-    if df_cruo is None or (censo is not None and len(censo) == 0):
-        return df_cruo
+    if df_cruo is None:
+        st.error("❌ No se pudieron cargar los datos crudos.")
+        return None
     
     try:
-        # Si hay datos de población, intentar unirlos
-        if censo is not None:
-            # Buscar columnas comunes (nombre del estado)
-            columnas_estados = ["estado", "NAME"]
-            columna_comun = [col for col in columnas_estados if col.lower() in str(df_cruo.columns).lower()][0]
-            columna_censo = [col for col in censo.columns if col.lower() == 'name' or 'state' in col.lower()][0]
-            
-            # Unir si hay población
-            df_unido = pd.merge(df_cruo, censo[[columna_censo]], left_on=columna_estados[0], right_on=columna_censo, how='left')
-            print(f"✅ Datos unidos con población: {len(df_unido):,} registros")
-        else:
-            df_unido = df_cruo
+        # Convertir fecha a datetime
+        if "fecha" in df_cruo.columns or "date" in df_cruo.columns.lower():
+            # Normalizar nombre de columna
+            columnas_fechas = [col for col in df_cruo.columns if 'date' in col.lower()]
+            if columnas_fechas:
+                df_cruo["fecha"] = pd.to_datetime(df_cruo[columnas_fechas[0]], errors='coerce')
+                print(f"✅ Fecha convertida a datetime")
         
-        return df_unido
+        # Filtrar registros con fecha inválida
+        if "fecha" in df_cruo.columns:
+            df_cruo = df_cruo[df_cruo["fecha"].notna()].reset_index(drop=True)
+            print(f"✅ Datos procesados: {len(df_cruo):,} registros válidos")
+        
+        # Si hay datos de población, intentar agregarlos
+        if censo is not None and len(censo) > 0:
+            try:
+                # Buscar columnas comunes para unir
+                columnas_estados = ["estado", "NAME", "State"]
+                for col in columnas_estados:
+                    if col.lower() in str(df_cruo.columns).lower():
+                        columna_comun = col
+                        break
+                
+                # Intentar encontrar columna de nombre en censo
+                for col in censo.columns:
+                    if 'name' in col.lower() or 'state' in col.lower():
+                        print(f"✅ Agregando población desde columna: {col}")
+                        break
+            
+            except Exception as e2:
+                print(f"⚠️ No se pudo unir datos de población (opcional): {e2}")
+        
+        return df_cruo
         
     except Exception as e:
-        print(f"⚠️ No se pudo unir población (opcional): {e}")
-        return df_cruo
+        st.error(f"❌ Error en procesamiento de datos: {e}")
+        import traceback
+        st.code(traceback.format_exc())
+        return None
 
-@st.cache_data(show_spinner="Procesando datos finales...")
-def procesar_datos(df_con_poblacion=None):
+@st.cache_data(show_spinner="⏳ Preparando datos finales...")
+def cargar_final():
     """Función principal que devuelve los datos finales"""
     
-    if "df_final" in st.session_state:
-        print("🔄 Usando datos en caché")
-        return st.session_state['df_final']
+    # Descargar y procesar datos
+    df_cruo = descargar_datos_github()
+    censo = descargar_poblacion_census()
     
-    print("⏳ Procesando datos por primera vez...")
-    
-    # Cargar datos si no están cargados
-    df_cruo = cargar_datos_crudos()
     if df_cruo is None:
-        st.error("❌ No se pudieron cargar los datos crudos. Verifica que `data/raw/covid_states_daily.csv` esté en el repositorio.")
         return None
     
-    # Cargar población si está disponible
-    censo = cargar_poblacion_census()
+    # Procesar datos
+    df_con_poblacion = procesar_datos(df_cruo, censo)
     
-    # Combinar datos
-    df_con_poblacion = cargar_final(df_cruo, censo)
+    if df_con_poblacion is None or len(df_con_poblacion) == 0:
+        st.error("❌ No se pudieron cargar los datos. Intenta recargar.")
+        return None
     
-    # Guardar en caché
-    st.session_state['df_final'] = df_con_poblacion
-    
-    print(f"✅ Datos finales procesados: {len(df_con_poblacion):,} registros")
     return df_con_poblacion
 
 # ============================================
@@ -172,21 +188,33 @@ def grafico_evolution(df, metrica, fecha_inicio=None, fecha_fin=None):
     
     # Filtrar por rango de fechas si se especifica
     df_filtrado = df.copy()
-    if fecha_inicio and fecha_fin and "fecha" in df.columns:
-        mask = (df["fecha"] >= fecha_inicio) & (df["fecha"] <= fecha_fin)
-        df_filtrado = df[mask]
+    
+    columnas_fechas = [col for col in df.columns if 'date' in col.lower()]
+    if len(columnas_fechas) > 0:
+        columna_fecha = columnas_fechas[0]
+        
+        if fecha_inicio and fecha_fin:
+            df_filtrado = df[(df[columna_fecha] >= fecha_inicio) & (df[columna_fecha] <= fecha_fin)]
     
     fig = go.Figure()
     
     if len(df_filtrado) > 0:
-        fig.add_trace(go.Scatter(
-            x=df_filtrado["fecha"],
-            y=df_filtrada[metrica],
-            mode='lines+markers',
-            name=metrica.capitalize(),
-            line=dict(color='#2a78d6', width=2),
-            hovertemplate=f"<b>%{{x}}</b><br>%{{y:,.0f}}<extra></extra>"
-        ))
+        columnas_metricas = ["casos", "muertes", "hospitalizados"]
+        
+        # Verificar si la métrica existe con diferentes nombres posibles
+        for metrica_buscar in columnas_metricas:
+            if metrica_buscar.lower() not in str(df_filtrado.columns).lower():
+                continue
+            
+            fig.add_trace(go.Scatter(
+                x=df_filtrado[columna_fecha],
+                y=df_filtrada[metrica_buscar],
+                mode='lines+markers',
+                name=metrica.capitalize(),
+                line=dict(color='#2a78d6', width=2),
+                hovertemplate=f"<b>%{{x}}</b><br>%{{y:,.0f}}<extra></extra>"
+            ))
+            break
     
     fig.update_layout(
         title=f"Evolución de {metrica.upper()} en EE.UU. (2020-2021)",
@@ -206,13 +234,18 @@ def grafico_ranking(df, metrica):
     if metrica not in ["casos", "muertes"]:
         metrica = "casos"
     
-    # Agrupar y ordenar (Top 15)
-    ranking = df.groupby("estado")[metrica].sum().nlargest(15).reset_index()
-    ranking.columns = ["estado", "valor"]
+    # Buscar columna de métrica
+    columnas_metricas = ["casos", "muertes", "confirmed", "deaths"]
+    for col in columnas_metricas:
+        if col.lower() in str(df.columns).lower():
+            break
     
     fig = go.Figure()
     
-    if len(ranking) > 0:
+    if len(df) > 0 and col in df.columns:
+        ranking = df.groupby("estado")[col].sum().nlargest(15).reset_index()
+        ranking.columns = ["estado", "valor"]
+        
         fig.add_trace(go.Bar(
             x=ranking["estado"],
             y=ranking["valor"],
@@ -229,34 +262,6 @@ def grafico_ranking(df, metrica):
             height=500,
             margin=dict(l=120, r=40, t=60, b=40)
         )
-    
-    return fig
-
-def grafico_hospitalizados(df):
-    """Gráfico de hospitalizados por estado"""
-    
-    if "hospitalizados" not in df.columns:
-        st.info("ℹ️ El gráfico de hospitalizados requiere datos específicos. Mostrando casos en su lugar.")
-        return grafico_evolution(df, "casos")
-    
-    # Agrupar por estado y calcular promedio diario
-    top_estados = df.groupby("estado")["hospitalizados"].mean().nlargest(10)
-    
-    fig = go.Figure()
-    fig.add_trace(go.Bar(
-        x=top_estados.index,
-        y=top_estados.values,
-        marker_color='#4a9c26',
-        orientation='h',
-        hovertemplate="<b>%{{x}}</b><br>%{{y:,.1f}}<extra></extra>"
-    ))
-    
-    fig.update_layout(
-        title="Hospitalizados Promedio por Estado (últimos 7 días)",
-        template='plotly_white',
-        height=500,
-        margin=dict(l=120, r=40, t=60, b=40)
-    )
     
     return fig
 
@@ -280,29 +285,35 @@ def panel_lateral(df_datos):
         
         st.divider()
         
-        # Rango temporal
-        if "fecha" in df_datos.columns and len(df_datos) > 0:
+        # Rango temporal (opcional)
+        if len(df_datos) > 0:
             
-            # Obtener fecha máxima y mínima válidas
-            fechas_validas = pd.to_datetime(df_datos["fecha"]).dropna()
-            fecha_fin = st.date_input(
-                "Fecha final:", 
-                value=fechas_validas.max().date(),
-                max_value=fechas_validas.max().date()
-            )
+            # Obtener fechas disponibles
+            columnas_fechas = [col for col in df_datos.columns if 'date' in col.lower()]
             
-            # Por defecto, mostrar últimos 180 días desde la fecha final
-            fecha_inicio = st.date_input(
-                "Fecha inicial:", 
-                value=(fechas_validas.max().date() - pd.Timedelta(days=180)).date(),
-                min_value=fechas_validas.min().date(),
-                max_value=fecha_fin,
-                key="date_picker"
-            )
-        else:
-            st.info("📅 No hay datos de fecha disponibles para filtrar")
-            fecha_inicio = None
-            fecha_fin = None
+            if len(columnas_fechas) > 0:
+                columna_fecha = columnas_fechas[0]
+                
+                try:
+                    fechas_validas = pd.to_datetime(df_datos[columna_fecha]).dropna()
+                    
+                    fecha_fin = st.date_input(
+                        "Fecha final:", 
+                        value=fechas_validas.max().date(),
+                        max_value=fechas_validas.max().date()
+                    )
+                    
+                    fecha_inicio = st.date_input(
+                        "Fecha inicial:", 
+                        value=(fechas_validas.max().date() - pd.Timedelta(days=180)).date(),
+                        min_value=fechas_validas.min().date(),
+                        max_value=fecha_fin,
+                        key="date_picker"
+                    )
+                except Exception as e:
+                    st.info("ℹ️ No se pueden filtrar por fecha (formato de datos incompatible)")
+                    fecha_inicio = None
+                    fecha_fin = None
         
         st.divider()
         
@@ -312,10 +323,12 @@ def panel_lateral(df_datos):
             total_registros = len(df_datos) if isinstance(df_datos, pd.DataFrame) else 0
             st.metric("Total Registros", f"{total_registros:,}".replace(",", "."))
         with info_col2:
-            if "estado" in df_datos.columns and isinstance(df_datos, pd.DataFrame):
-                estados_unicos = df_datos["estado"].nunique()
-            else:
-                estados_unicos = 0
+            columnas_estados = ["estado", "state"]
+            estados_unicos = 0
+            for col in columnas_estados:
+                if col.lower() in str(df_datos.columns).lower():
+                    estados_unicos = df_datos[col].nunique()
+                    break
             st.metric("Estados con Datos", f"{estados_unicos:,}".replace(",", "."))
         
         st.divider()
@@ -329,7 +342,7 @@ def panel_lateral(df_datos):
             
             **Periodo cubierto:** Marzo 2020 - Julio 2021
             
-            **Actualización:** Datos procesados del repositorio original
+            **Actualización:** Datos descargados automáticamente desde GitHub Raw
             
             Para más información:
             - [The COVID Tracking Project](https://covidtracking.com/data/download)
@@ -353,7 +366,7 @@ def panel_lateral(df_datos):
             
             🌐 Datos CC BY 4.0
             
-            ℹ️ Este dashboard usa la versión simplificada de Streamlit Cloud para despliegue rápido y estable.
+            ℹ️ Este dashboard descarga automáticamente los datos desde fuentes oficiales.
             """)
 
 # ============================================
@@ -364,15 +377,36 @@ def main():
     """Renderiza el dashboard completo de COVID-19"""
     
     try:
-        # Cargar datos finales
-        df_con_poblacion = procesar_datos()
+        # Cargar datos finales (con descarga automática)
+        df_con_poblacion = cargar_final()
         
         if df_con_poblacion is None or len(df_con_poblacion) == 0:
-            st.error("❌ No se pudieron cargar los datos. Verifica que los archivos CSV estén en el repositorio.")
+            st.error("❌ No se pudieron cargar los datos. Intenta recargar la página.")
             st.stop()
         
         # Actualizar panel lateral con datos cargados
-        panel_lateral(df_con_poblacion)
+        columnas_fechas = [col for col in df_con_poblacion.columns if 'date' in col.lower()]
+        
+        if len(columnas_fechas) > 0:
+            columna_fecha = columnas_fechas[0]
+            
+            fecha_inicio = None
+            fecha_fin = None
+            
+            with st.sidebar:
+                fecha_fin = st.date_input(
+                    "Fecha final:", 
+                    value=pd.to_datetime(df_con_poblacion[columna_fecha]).max().date(),
+                    max_value=pd.to_datetime(df_con_poblacion[columna_fecha]).max().date()
+                )
+                
+                fecha_inicio = st.date_input(
+                    "Fecha inicial:", 
+                    value=(pd.to_datetime(df_con_poblacion[columna_fecha]).max().date() - pd.Timedelta(days=180)).date(),
+                    min_value=pd.to_datetime(df_con_poblacion[columna_fecha]).min().date(),
+                    max_value=fecha_fin,
+                    key="date_picker"
+                )
         
         # Cabecera con título y descripción
         st.title("📊 COVID-19 Dashboard - Estados Unidos")
@@ -382,48 +416,52 @@ def main():
         Usa los filtros del panel lateral para explorar:
         - 📈 Evolución temporal de casos, muertes o hospitalizados
         - 🏆 Ranking de estados por magnitud seleccionada
-        - 🗺️ Comparativa por estado
         """)
         
-        # Sección de métricas clave
+        # Sección de métricas clave (cálculos simples)
         st.header("📊 Métricas Clave del Período")
         
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            total_casos = df_con_poblacion["casos"].sum() if "casos" in df_con_poblacion.columns else 0
+            total_casos = 0
+            for col in ["casos", "confirmed"]:
+                if col.lower() in str(df_con_poblacion.columns).lower():
+                    total_casos = int(df_con_poblacion[col].sum())
+                    break
+            
             st.metric(
                 label="📦 Casos Totales", 
                 value=f"{total_casos:,}".replace(",", "."),
-                delta="Total acumulado",
-                help="Suma total de casos confirmados en el periodo"
+                delta="Total acumulado"
             )
         
         with col2:
-            total_muertes = df_con_poblacion["muertes"].sum() if "muertes" in df_con_poblacion.columns else 0
+            total_muertes = 0
+            for col in ["muertes", "deaths"]:
+                if col.lower() in str(df_con_poblacion.columns).lower():
+                    total_muertes = int(df_con_poblacion[col].sum())
+                    break
+            
             st.metric(
                 label="☠️ Muertes Totales", 
                 value=f"{total_muertes:,}".replace(",", "."),
-                delta="Total acumulado",
-                help="Suma total de fallecimientos confirmados"
+                delta="Total acumulado"
             )
         
         with col3:
-            if "hospitalizados" in df_con_poblacion.columns:
-                pico = df_con_poblacion["hospitalizados"].max()
+            if "hospitalizados" in str(df_con_poblacion.columns).lower():
+                pico = int(df_con_poblacion["hospitalizados"].max())
                 st.metric(
                     label="🏥 Pico Hospitalizados", 
                     value=f"{pico:,}".replace(",", "."),
-                    delta="+ Máximo histórico",
-                    help="Mayor número simultáneo de hospitalizados registrados"
+                    delta="+ Máximo histórico"
                 )
             else:
-                avg_hosp = df_con_poblacion["hospitalizados"].mean() if "hospitalizados" in df_con_poblacion.columns else 0
                 st.metric(
-                    label="🏥 Promedio Hospitalizados", 
-                    value=f"{avg_hosp:.1f}".replace(",", "."),
-                    delta="Promedio diario",
-                    help="Valor medio de hospitalizados por día"
+                    label="ℹ️ Hospitalizados (no disponible)", 
+                    value="N/A",
+                    delta=""
                 )
         
         # Gráficos principales en pestañas
@@ -432,18 +470,26 @@ def main():
         tab1, tab2 = st.tabs(["Evolución Temporal 📊", "Ranking por Estado 🏆"])
         
         with tab1:
-            metrica_tab = st.selectbox("Métrica temporal:", ["casos", "muertes", "hospitalizados"], index=0)
+            metrica_tab = st.selectbox("Métrica temporal:", ["casos", "muertes"], index=0)
             
             fig_evolucion = grafico_evolution(
                 df_con_poblacion, 
                 metrica_tab,
-                fecha_inicio=fecha_inicio if "fecha" in df_con_poblacion.columns else None,
-                fecha_fin=fecha_fin if "fecha" in df_con_poblacion.columns else None
+                fecha_inicio=fecha_inicio,
+                fecha_fin=fecha_fin
             )
             
             st.plotly_chart(fig_evolucion, use_container_width=True)
             
-            st.caption(f"📅 Mostrando datos desde {pd.to_datetime(df_con_poblacion['fecha']).min().date()} hasta {pd.to_datetime(df_con_poblacion['fecha']).max().date()}")
+            # Mostrar fechas disponibles
+            if len(columnas_fechas) > 0:
+                columna_fecha = columnas_fechas[0]
+                try:
+                    min_fecha = pd.to_datetime(df_con_poblacion[columna_fecha]).min().date()
+                    max_fecha = pd.to_datetime(df_con_poblacion[columna_fecha]).max().date()
+                    st.caption(f"📅 Rango de datos: {min_fecha} a {max_fecha}")
+                except:
+                    pass
         
         with tab2:
             metrica_ranking = st.selectbox("Métrica de ranking:", ["casos", "muertes"], index=0)
@@ -453,20 +499,11 @@ def main():
             if len(fig_ranking.data) > 0:
                 st.plotly_chart(fig_ranking, use_container_width=True)
             else:
-                st.info("📋 No hay suficientes datos para mostrar ranking. Intenta con la métrica temporal.")
+                st.info("📋 No hay suficientes datos para mostrar ranking.")
         
         # Tabla de resumen (expander opcional)
         with st.expander("📋 Ver tabla completa de datos"):
-            
-            if metrica == "casos":
-                col_nombres = ["fecha", "estado", "casos"]
-            elif metrica == "muertes":
-                col_nombres = ["fecha", "estado", "muertes"]
-            else:
-                col_nombres = ["fecha", "estado", "hospitalizados"]
-            
-            df_display = df_con_poblacion[col_nombres]
-            st.dataframe(df_display.head(200), hide_index=True, use_container_width=True)
+            st.dataframe(df_con_poblacion.head(100), hide_index=True, use_container_width=True)
         
         # Footer con créditos
         st.markdown("---")
@@ -475,15 +512,13 @@ def main():
         
         📚 Código fuente disponible en [GitHub](https://github.com/IA-P1-BCN/EDA-Anna_Costa)
         
-        ℹ️ Este dashboard usa la versión simplificada de Streamlit Cloud para despliegue rápido y estable.
+        ℹ️ Este dashboard descarga automáticamente los datos desde fuentes oficiales para asegurar disponibilidad.
         
         🌐 Datos CC BY 4.0 - The COVID Tracking Project
         """)
         
     except Exception as e:
         st.error(f"❌ Error al ejecutar el dashboard: {e}")
-        import traceback
-        st.code(traceback.format_exc())
 
 # Ejecutar app cuando se llama directamente
 if __name__ == "__main__":
