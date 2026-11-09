@@ -1,0 +1,16 @@
+# Configuración del dashboard COVID-19 - OPTIMIZADO PARA STREAMLIT CLOUD
+
+[theme]
+# Tema claro, como el fondo de los gráficos del proyecto.
+base = "light"
+backgroundColor = "#fcfcfb"
+primaryColor = "#2a78d6"
+textColor = "#0b0b0b"
+
+[browser]
+gatherUsageStats = false
+
+[server]
+headless = true
+enableCORS = false
+enableXSRFProtection = false

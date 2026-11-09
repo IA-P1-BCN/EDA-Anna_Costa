@@ -1,123 +1,289 @@
-# 📊 Proyecto EDA: Exploratory Data Analysis
+# COVID-19 en Estados Unidos: análisis exploratorio de datos
 
-<img width="11520" height="3456" alt="Banner Proyectos" src="https://github.com/user-attachments/assets/a6561ed2-24e1-451a-b75d-07e0e85aed63" />
+Análisis exploratorio (EDA) de los datos diarios de COVID-19 por estado en Estados Unidos, de enero de 2020
+a marzo de 2021: carga, limpieza, exploración y conclusiones para un público no técnico.
 
-## 📋 Planteamiento
+El enunciado del proyecto está en [docs/ENUNCIADO.md](docs/ENUNCIADO.md).
 
-Ustedes trabajan en el equipo de datos de una consultora. El CEO de un cliente les entrega un conjunto de datos que nadie ha mirado con calma y les pide algo muy concreto: **que le muestren datos limpios, con sentido, y la historia que hay detrás de ellos**, antes de decidir qué hacer con esa información.
+**Informe ejecutivo** (2 páginas, para público no técnico):
+[reports/informe_ejecutivo.pdf](reports/informe_ejecutivo.pdf).
 
-El CEO no lee código: lee su informe. Por eso tienen que entender los datos, limpiarlos, explorarlos y contar lo que encontraron de forma clara.
+**Informe de calidad de datos** (qué faltaba, qué se corrigió y qué quedó pendiente, con cifras):
+[reports/informe_calidad.md](reports/informe_calidad.md).
 
-## 🎯 Objetivo
+**Presentación del hallazgo principal** (5 minutos, para público no técnico):
+[reports/presentacion.pdf](reports/presentacion.pdf).
 
-Realizar un análisis exploratorio de datos (EDA) completo sobre un dataset real: cargarlo, entenderlo, limpiarlo, visualizarlo y comunicar sus conclusiones en un informe ejecutivo.
+**Gráficos interactivos** (regiones y olas, se abren en el navegador): [reports/interactivos/](reports/interactivos/).
 
-Pueden usar el dataset de su preferencia (ver [qué debe cumplir](#-qué-dataset-puedo-usar)). Si no tienen uno definido, usen los datos públicos de **COVID-19 en Estados Unidos** del [COVID Tracking Project](https://covidtracking.com/data/download), que registró casos, pruebas, hospitalizaciones y fallecimientos por estado hasta marzo de 2021.
+## Datos
 
-> Cuéntennos la historia que leyeron en los datos :)
+- **Fuente:** [The COVID Tracking Project](https://covidtracking.com/data/download) (The Atlantic), licencia
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+- **Descarga:** `https://api.covidtracking.com/v1/states/daily.csv`
+- **Contenido:** 20.780 filas y 56 columnas, con una fila por estado o territorio y por día (50 estados,
+  Washington D. C. y 5 territorios), del 13-01-2020 al 07-03-2021. Recoge casos, tests, hospitalizaciones
+  y fallecimientos, tanto acumulados como diarios.
 
-## 🛠️ Requisitos Técnicos
+**Segunda fuente, población por estado** (notebook 05):
 
-1. Python 3 y Jupyter Notebook (en VS Code o similar)
-2. `requests` y/o `pandas` para cargar los datos
-3. `pandas` y `numpy` para limpiar y transformar
-4. `matplotlib`, `seaborn` y/o `plotly` para visualizar
-5. Control de versiones con Git y GitHub (ramas ordenadas y mensajes de commit claros)
+- **Fuente:** [US Census Bureau, Population Estimates Program](https://www.census.gov/programs-surveys/popest.html),
+  *Annual Estimates of the Resident Population for the United States, Regions, States, District of Columbia, and
+  Puerto Rico* (serie 2020-2023, Vintage 2023). Datos públicos del Gobierno de Estados Unidos.
+- **Descarga:** `https://www2.census.gov/programs-surveys/popest/datasets/2020-2023/state/totals/NST-EST2023-ALLDATA.csv`
+- **Uso:** población a 1 de julio de 2020 (`POPESTIMATE2020`), unida a los datos de COVID por código FIPS para
+  calcular tasas por cada 100.000 habitantes.
 
-## 📅 Plazos
+No hace falta descargar nada a mano: la primera vez que se ejecuta, el notebook baja el CSV a `data/raw/` y
+guarda la versión limpia en `data/processed/`. Las dos carpetas están en `.gitignore`.
 
-Una semana.
+## Estructura
 
-## 📦 Entregables
-
-1. Repositorio en GitHub con al menos un **Jupyter notebook** donde el análisis esté ordenado y explicado paso a paso (con texto en markdown entre las celdas de código, no solo código).
-2. Un **informe ejecutivo** con las conclusiones, pensado para alguien que no sabe de datos. Pueden ver un ejemplo [aquí](https://github.com/user-attachments/files/22068569/reporte.ejecutivo.EDA.Formula1.pdf).
-3. `README.md` del repositorio con: de dónde salen los datos, cómo instalar las librerías y cómo ejecutar el notebook.
-4. Archivo `requirements.txt` para que cualquier persona pueda reproducir su análisis.
-
-## 🗂️ ¿Qué dataset puedo usar?
-
-Si eligen uno propio, debe cumplir esto para que haya material suficiente de análisis:
-
-- Al menos **1.000 filas** y **8 columnas**.
-- Mezcla de columnas **numéricas, categóricas y de fecha** (o al menos numéricas y categóricas).
-- Con **valores faltantes o datos sucios reales** (si es perfecto, no hay nada que limpiar).
-- Que les interese: se nota en el informe.
-
-Algunas fuentes: [Kaggle](https://www.kaggle.com/datasets), [datos.gob.es](https://datos.gob.es/), o cualquier API pública.
-
-<details>
-<summary><strong>🦠 Guía del dataset COVID (opcional)</strong></summary>
-
-```python
-import requests
-import pandas as pd
-
-url = "https://api.covidtracking.com/v1/states/daily.json"
-df = pd.DataFrame(requests.get(url).json())
+```text
+├── notebooks/
+│   ├── 01_eda_covid.ipynb   # carga, limpieza y análisis básico
+│   ├── 02_outliers.ipynb    # valores atípicos y justificación de la limpieza
+│   ├── 03_variables_y_agrupaciones.ipynb  # variables nuevas, groupby y pivot_table
+│   ├── 04_correlaciones_y_tendencias.ipynb # correlaciones, desfases y tendencias
+│   ├── 05_normalizar_poblacion.ipynb       # población del Census Bureau y tasas por 100.000 habitantes
+│   ├── 06_calidad_y_transformaciones.ipynb # datos dudosos, media móvil y escala logarítmica
+│   └── 07_segmentos_plotly.ipynb           # regiones y olas con gráficos interactivos
+├── src/
+│   ├── pipeline.py          # descarga, limpia y guarda los datos con un solo comando
+│   ├── limpieza.py          # funciones de carga y limpieza
+│   ├── variables.py         # variables derivadas (ola, región, positividad, letalidad)
+│   ├── poblacion.py         # carga de la población y unión por código FIPS
+│   ├── calidad.py           # reglas de coherencia, correcciones y días sin publicar
+│   ├── transformaciones.py  # media móvil, efecto del día de la semana y logaritmo
+│   ├── graficos.py          # estilo común de los gráficos
+│   ├── interactivos.py      # colores por región y estilo de los gráficos de plotly
+│   ├── dashboard.py         # filtros y tablas del dashboard
+│   ├── presentacion.py      # genera la presentación
+│   ├── informe.py           # genera el informe ejecutivo en PDF
+│   └── informe_calidad.py   # genera el informe de calidad de datos
+├── reports/
+│   ├── informe_ejecutivo.pdf
+│   ├── informe_calidad.md
+│   ├── presentacion.pdf     # diapositivas de la presentación (16:9)
+│   ├── figuras/             # gráficos del informe
+│   └── interactivos/        # gráficos de plotly en HTML
+├── data/                    # se crea al ejecutar (no se sube al repositorio)
+│   ├── raw/
+│   └── processed/
+├── tests/                   # tests de las funciones de src/ (pytest)
+├── docs/
+│   └── ENUNCIADO.md
+├── app.py                   # dashboard interactivo (Streamlit)
+├── .streamlit/config.toml   # tema claro del dashboard
+├── pyproject.toml           # configuración de pytest
+└── requirements.txt
 ```
 
-Qué van a encontrar (para que no los sorprenda):
+## Instalación
 
-- Unas **20.780 filas y 56 columnas**: un registro por estado o territorio y por día, del 13 de enero de 2020 al 7 de marzo de 2021.
-- La columna `date` viene como número entero (`20200313`), no como fecha. Hay que convertirla: `pd.to_datetime(df["date"].astype(str), format="%Y%m%d")` (el `astype(str)` evita un aviso en pandas 3).
-- **Muchas columnas casi vacías** (varias con más del 80% de nulos). Decidir qué hacer con ellas forma parte del análisis.
-- Hay valores **negativos** en columnas de incrementos diarios (por ejemplo `deathIncrease`). Son correcciones que hicieron los estados, y conviene decidir qué hacer con ellas.
-- Es una descarga grande (unos 29 MB). Guárdenla en un CSV para no pedirla cada vez.
-- Los números son **acumulados** y **absolutos**: un estado grande siempre tendrá más casos que uno pequeño. Piensen cómo compararlos de forma justa.
+Hace falta Python 3.12 o superior.
 
-</details>
+```bash
+python -m venv .venv
 
-## 🏆 Niveles de Entrega
+# Windows
+.venv\Scripts\activate
+# macOS / Linux
+source .venv/bin/activate
 
-Cada nivel incluye todo lo del anterior. Pueden elegir hasta dónde llegar, pero un nivel bien hecho vale más que dos a medias.
+pip install -r requirements.txt
+```
 
-### 🟢 Nivel Esencial
+## Ejecución
 
-- Cargar los datos y revisar su estructura: `shape`, `info()`, `head()`, `describe()`
-- Identificar **valores faltantes y duplicados**, y decidir qué hacer con cada uno
-- Corregir los tipos de datos (por ejemplo, convertir fechas)
-- Eliminar o renombrar columnas explicando el porqué
-- **Análisis univariado**: al menos 3 variables (histograma, conteo, boxplot)
-- **Análisis bivariado**: al menos 3 relaciones entre dos variables
-- Mínimo **5 visualizaciones** con título, ejes con nombre y leyenda cuando haga falta
-- Responder por escrito al menos **3 preguntas** que ustedes mismos se plantearon al principio
-- Notebook ordenado, con texto explicativo y que se ejecute de arriba abajo sin errores
+Desde la raíz del repositorio y con el entorno activado, este comando descarga los datos originales, los limpia y
+guarda en `data/processed/` todo lo que leen los notebooks:
 
-### 🟡 Nivel Medio
+```bash
+python -m src.pipeline
+```
 
-- Justificar cada decisión de limpieza (por qué imputo con la mediana, por qué elimino esta columna)
-- Detectar **valores atípicos** (outliers) con boxplots o el rango intercuartílico, y decidir qué hacer con ellos
-- Agrupar y resumir con `groupby`, `agg` y tablas dinámicas (`pivot_table`)
-- Crear **al menos 3 variables nuevas** (feature engineering): rangos o grupos de una variable numérica, partes de una fecha (mes, año), ratios, porcentajes, etc.
-- **Matriz de correlación** con heatmap y su interpretación
-- Si su dataset tiene fechas, análisis de **tendencias en el tiempo** (gráficos de líneas). Si no tiene, comparar cómo cambia el comportamiento entre grupos
-- Informe ejecutivo de 1 a 2 páginas con conclusiones claras y gráficos que las respalden
+Si `data/raw/` está vacía, descarga los dos originales (The COVID Tracking Project y US Census Bureau); si ya están, los
+reutiliza. Para volver a descargarlos: `python -m src.pipeline --descargar`. Hace los mismos pasos que los notebooks, con
+las funciones de `src/`, y genera estos ficheros:
 
-### 🟠 Nivel Avanzado
+| Fichero | Qué añade | Lo lee |
+| --- | --- | --- |
+| `covid_estados_limpio.csv` | datos limpios y validados con `validar_limpios()` | notebook 03 |
+| `covid_estados_variables.csv` | año, mes, semana, ola, región, positividad y letalidad | notebooks 04 y 05, informe |
+| `covid_estados_poblacion.csv` | población y tasas por cada 100.000 habitantes | notebook 06 |
+| `covid_estados_final.csv` | marcas de calidad y tests imposibles vacíos | notebook 07 |
 
-- **Normalizar** para comparar con justicia (por ejemplo, ratios por cada 100 o 1.000 unidades, o porcentajes en lugar de totales)
-- **Enriquecer el análisis con una segunda fuente de datos** (`merge`) que aporte contexto al dataset principal
-- Analizar datos de calidad dudosa: valores imposibles, correcciones, inconsistencias entre columnas, y documentar cómo las trataron
-- Aplicar al menos una **transformación justificada** y explicar por qué: media móvil si hay series temporales, escala logarítmica o escalado si hay distribuciones muy sesgadas
-- Comparar **segmentos o grupos** (regiones, categorías, periodos) con visualizaciones claras
-- Gráficos interactivos con `plotly`
-- Código de limpieza reutilizable en **funciones** o en un archivo `.py` aparte
+Si los datos limpios no pasan la validación, el pipeline se para sin escribir ningún fichero.
 
-### 🔴 Nivel Experto
+Para abrir un notebook:
 
-- **Dashboard interactivo** (Streamlit, Dash o similar) donde el CEO pueda filtrar y explorar solo
-- **Pipeline reproducible**: un script que cargue los datos, los limpie y guarde el resultado, ejecutable con un solo comando
-- **Tests** (con `pytest`) de sus funciones de limpieza, escritos antes que la función
-- Informe de calidad de datos: qué faltaba, qué se corrigió, qué quedó pendiente y por qué
-- Presentación del hallazgo principal en 5 minutos, con storytelling para público no técnico
-- Publicación del dashboard o del informe en un enlace accesible
+```bash
+jupyter notebook notebooks/01_eda_covid.ipynb
+```
 
-## 🌟 Competencias
+Después: *Kernel → Restart & Run All*. También puede abrirse en VS Code seleccionando el intérprete de `.venv`.
 
-- Evaluar conjuntos de datos utilizando herramientas de análisis y de visualización de datos
-- Uso y gestión de formato `.csv` y de datos desde APIs
-- Limpieza y preprocesado de datos
-- Visualización de datos (seaborn, matplotlib, plotly)
-- Análisis exploratorio detallado (EDA)
-- Comunicar resultados de datos a público no técnico
+Después del pipeline, cualquier notebook puede abrirse directamente. Sin él, los notebooks se ejecutan **en orden** (01, 02,
+03, 04, 05, 06, 07...): cada uno guarda en `data/processed/` los datos que usa el siguiente.
+
+Para ejecutarlos enteros sin abrirlos:
+
+```bash
+jupyter nbconvert --to notebook --execute --inplace notebooks/01_eda_covid.ipynb
+jupyter nbconvert --to notebook --execute --inplace notebooks/02_outliers.ipynb
+jupyter nbconvert --to notebook --execute --inplace notebooks/03_variables_y_agrupaciones.ipynb
+jupyter nbconvert --to notebook --execute --inplace notebooks/04_correlaciones_y_tendencias.ipynb
+jupyter nbconvert --to notebook --execute --inplace notebooks/05_normalizar_poblacion.ipynb
+jupyter nbconvert --to notebook --execute --inplace notebooks/06_calidad_y_transformaciones.ipynb
+jupyter nbconvert --to notebook --execute --inplace notebooks/07_segmentos_plotly.ipynb
+```
+
+El informe ejecutivo se genera después del pipeline o de los notebooks 01 a 03 (todas sus cifras se calculan a partir de
+los datos):
+
+```bash
+python -m src.informe
+```
+
+El informe de calidad de datos también calcula todas sus cifras. Lee los originales de `data/raw/`
+(si faltan, los descarga), así que no hace falta ejecutar nada antes:
+
+```bash
+python -m src.informe_calidad
+```
+
+La presentación también calcula todas sus cifras, y en la consola muestra cuánto se tarda en contar cada
+diapositiva, para ensayar con cronómetro.
+Si no existen los datos procesados, ejecuta antes el pipeline:
+
+```bash
+python -m src.presentacion
+```
+
+## Dashboard
+
+Un panel interactivo para explorar los datos sin tocar código: se filtra por región, estado y
+rango de fechas, y todas las cifras y gráficos se recalculan con la selección.
+
+- **Evolución:** casos, muertes u hospitalizados al día, con la media de 7 días.
+- **Ranking por habitante:** casos o muertes del periodo por cada 100.000 habitantes, por estado.
+- **Hospitalizados:** hospitalizados por cada 100.000 habitantes en cada región.
+- **Datos:** la tabla de la selección, que se puede descargar en CSV.
+
+Para abrirlo en local, desde la raíz del repositorio y con el entorno activado:
+
+```bash
+streamlit run app.py
+```
+
+Lee `data/processed/covid_estados_final.csv`. Si no existe, ejecuta antes el pipeline él mismo
+(la primera carga tarda unos segundos más).
+
+### Publicación
+
+El dashboard se publica gratis en [Streamlit Community Cloud](https://share.streamlit.io): *Create app*,
+repositorio `IA-P1-BCN/EDA-Anna_Costa`, rama `dev`, fichero `app.py` y Python 3.12 en
+*Advanced settings*. Al arrancar, el servidor descarga y prepara los datos con el pipeline.
+
+La app **se duerme sola cuando pasa 12 horas sin visitas**, y la primera visita la despierta
+(tarda un par de minutos en volver). No hay nada que la mantenga despierta: ni pings, ni tareas
+programadas, ni recargas automáticas en la página.
+
+## Tests
+
+Las funciones de `src/` (carga, limpieza, calidad, población, variables y transformaciones) tienen tests
+automáticos con `pytest`. Usan datos pequeños inventados dentro de los propios tests, así que no necesitan
+descargar nada ni haber ejecutado los notebooks. Desde la raíz del repositorio y con el entorno activado:
+
+```bash
+pytest
+```
+
+Para ver el nombre de cada test: `pytest -v`. Tienen que pasar todos antes de subir cambios.
+
+`validar_limpios()` (en `src/limpieza.py`) se escribió primero como test y después como función: comprueba que los
+datos limpios no tienen filas repetidas, incrementos negativos ni días que falten.
+
+## Qué hay en el análisis
+
+1. **Revisión de la estructura:** `shape`, `info()`, `head()` y `describe()`.
+2. **Limpieza:**
+   - Valores faltantes y duplicados.
+   - Conversión de la fecha.
+   - Se descartan 41 columnas, con el motivo de cada una.
+   - Renombrado al castellano.
+   - Tratamiento de los incrementos diarios negativos (correcciones de los estados).
+3. **Análisis univariado:** casos diarios, muertes diarias y unidad de medida de los tests.
+4. **Análisis bivariado:** evolución en el tiempo, ranking de estados, hospitalizados frente a muertes y
+   retraso entre casos y muertes.
+5. **Valores atípicos** (notebook 02):
+   - Por qué el IQR global no sirve con estados de tamaños tan distintos.
+   - IQR por estado: la mayoría de los atípicos son los picos de la ola de invierno.
+   - Detección de atrasos de notificación (picos aislados) y qué hacer con cada tipo.
+   - Repaso de todas las decisiones de limpieza con sus alternativas.
+6. **Variables nuevas y agrupaciones** (notebook 03):
+   - Año, mes y semana; ola (cortada en los valles de la curva); región del Census Bureau.
+   - Tasa de positividad de 7 días y letalidad aparente.
+   - Resúmenes por ola, región y estado con `groupby` y `agg`, y `pivot_table` de positividad por región y mes.
+7. **Correlaciones y tendencias** (notebook 04):
+   - Matriz de correlación calculada dentro de cada estado (y por qué no mezclando todas las filas) con mapa de calor.
+   - Desfases entre casos, hospitalizados y muertes.
+   - Tendencias nacionales, orden de las variables en la ola de invierno, positividad por región y cuatro estados.
+8. **Normalizar por población** (notebook 05):
+   - Población por estado del US Census Bureau, unida con `merge` por código FIPS y comprobación de que no se
+     pierden filas ni estados.
+   - Casos, muertes y máximo de hospitalizados por cada 100.000 habitantes.
+   - Ranking de estados absoluto frente a ranking por habitante, y muertes por habitante de cada región en cada ola.
+9. **Calidad de los datos y transformaciones** (notebook 06):
+   - Reglas de coherencia entre columnas (positivos y tests, muertes y casos, UCI, respirador y recuperados).
+   - Incrementos diarios frente a acumulados y correcciones por estado y fecha.
+   - Días sin publicar (ceros que no son ceros) y efecto del día de la semana.
+   - Media móvil de 7 días y escala logarítmica, con su justificación, y tabla con el tratamiento de cada tipo de
+     dato dudoso.
+10. **Regiones y olas con `plotly`** (notebook 07):
+    - Mapa de las cuatro regiones del Census Bureau.
+    - Casos, hospitalizados y muertes por habitante de cada región en el tiempo, con botones para cambiar de
+      variable y zoom.
+    - Mapa de muertes por habitante de cada estado con un botón por ola.
+    - Estados de cada región por ola (cajas con un punto por estado) y tabla resumen con tests, positividad y
+      letalidad aparente.
+
+## Conclusiones principales
+
+- **Tres olas:** primavera de 2020, verano de 2020 e invierno de 2020-2021. La peor fue la de enero de 2021,
+  con unos 247.000 casos y 3.300 muertes al día (media de 7 días).
+- **Concentración por estados:** California, Texas, Florida, Nueva York e Illinois suman el 38 % de los casos.
+  Son cifras absolutas, que reflejan sobre todo la población de cada estado.
+- **Anticipo de las muertes:** los hospitalizados y las muertes diarias van muy de la mano (r = 0,87), y los
+  casos anticipan las muertes en unos 23 días.
+- **Atípicos:** casi 9 de cada 10 días atípicos de un estado caen en la ola de invierno y son reales. Los
+  problemáticos son los atrasos de notificación (por ejemplo, 2.559 muertes en Ohio el 12-02-2021): se mantienen
+  y se marcan. Los hospitalizados nuevos acumulan tantos saltos que no se usan.
+- **Cada ola tuvo su zona:** el Noreste concentró el 53 % de las muertes de la primavera de 2020, el Sur el 55 % de
+  los casos del verano, y la ola de otoño-invierno se repartió por todo el país casi en proporción a la población.
+- **Letalidad aparente:** bajó del 5,8 % (mayo de 2020) a menos del 2 %, sobre todo porque al principio se hacían
+  pocos tests y solo se detectaban los casos graves.
+- **Cadena casos → hospitalizados → muertes:** dentro de cada estado, los hospitalizados siguen a los casos en unos
+  3 días y las muertes a los hospitalizados en unos 11. Los hospitalizados son el mejor aviso de las muertes.
+- **Por habitante, el ranking cambia:** el de muertes absolutas sigue casi al de población (Spearman 0,94).
+  Por cada 100.000 habitantes, California, Texas y Florida bajan a mitad de tabla y Nueva Jersey es el estado con
+  más muertes (254), seguido de Massachusetts y Rhode Island. En la primavera de 2020 el Noreste tuvo unas 100
+  muertes por cada 100.000 habitantes, una cifra comparable a la de cada región en toda la ola de otoño-invierno
+  (entre 89 y 112).
+- **Calidad de los datos:** los datos imposibles son pocos y están localizados (59 filas con más positivos que
+  tests, todas en marzo de 2020 o antes). Lo que más distorsiona es el calendario de publicación: 562 días con 0
+  casos en estados con miles de casos y muertes del lunes al 55 % de lo normal. Por eso las series se ven con
+  media de 7 días.
+- **Regiones:** el Medio Oeste fue el primero en la ola de otoño-invierno (pico de casos el 19-11-2020, casi dos
+  meses antes que el resto). Dentro de cada región hay mucha variedad: en la primavera de 2020, Nueva Jersey
+  tuvo 151 muertes por 100.000 habitantes y Maine, 7. En invierno, el Noreste hizo el doble de tests por
+  habitante que el Sur, con la mitad de positividad.
+
+## Limitaciones
+
+- La población es la de 1 de julio de 2020 para todo el periodo, y no hay datos por edad: no se puede saber si un
+  estado tuvo más muertes por habitante porque su población es más mayor.
+- En la primavera de 2020 se hacían pocos tests, así que los casos de la primera ola están infracontados.
+- Cada estado medía los tests y las hospitalizaciones a su manera: unos cuentan personas y otros muestras, así que
+  la positividad no se puede comparar entre estados con distinta forma de contar.
