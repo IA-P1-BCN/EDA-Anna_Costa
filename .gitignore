@@ -1,0 +1,99 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments - IMPORTANT: Keep data outside!
+venv/
+.venv/
+env/
+.env/
+
+# VirtualVEnv (Manjaro Linux)
+.venv-native/
+
+# Spyder project files
+.spyderproject
+.spyproject
+
+# Rope (Python refactoring tool)
+.ropeproject
+
+# PyCharm-related directories and files
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# Studio 3.0 (the Android IDE)
+.studio3/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# nodejs build directory
+node_modules/
+
+# dotenv - never commit env variables!
+.env
+
+# coverage reports
+htmlcov/
+.coverage
+.coverage.*
+*.cover
+*.py.cover
+*.lcov
+
+# pytest cache
+.pytest_cache/
+.mypy_cache/
+
+# Sphinx documentation
+docs/_build/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+.dmyypy.json
+
+# Cython debug symbols
+cython_debug/
+
+# Streamlit Cloud
+.env.local
+
+# IDEs and text editors
+.vscode/
+*.swp
+*.swo
+*~
