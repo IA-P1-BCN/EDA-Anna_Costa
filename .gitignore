@@ -47,7 +47,7 @@ coverage.xml
 *.py.cover
 *.lcov
 
-# Virtual environments
+# Virtual environments - IMPORTANT: Keep data outside!
 .venv/
 env/
 env.bak/
@@ -76,5 +76,5 @@ dmypy.json
 # IPython notebook checkpoints
 .ipynb_checkpoints
 
-# Streamlit Cloud / GitHub Pages - only ignore secrets
+# Streamlit Cloud secrets (keep config.toml and app.py)
 .streamlit/secrets.toml

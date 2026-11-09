@@ -1,194 +1,491 @@
-"""Dashboard interactivo: COVID-19 en Estados Unidos (2020-2021).
+"""📊 COVID-19 Dashboard - Estados Unidos (2020-2021)
+Optimizado para despliegue en Streamlit Cloud
 
-Uso, desde la raíz del repositorio y con el entorno activado:
+Este dashboard interactivo visualiza los datos de COVID-19 procesados desde The COVID Tracking Project.
 
-    streamlit run app.py
+🌐 Fuentes de datos:
+   - The COVID Tracking Project (casos, muertes, hospitalizados)
+   - US Census Bureau (población por estado)
+   
+📚 Licencia: CC BY 4.0
+   
+ℹ️ Para ejecutar localmente (requiere entorno virtual):
+   streamlit run app.py
 
-Si no se ha ejecutado antes el pipeline, la primera carga descarga y prepara los datos.
+🌐 Para desplegar en Streamlit Cloud:
+   Sube este repositorio a GitHub (brama main) y conecta en https://streamlit.io/cloud
 """
 
-import plotly.graph_objects as go
+import pandas as pd
 import streamlit as st
+import plotly.graph_objects as go
+from pathlib import Path
 
-from src.dashboard import (METRICAS, METRICAS_RANKING, REGIONES_DASHBOARD, cargar_final,
-                           estados_de, filtrar, hospitalizados_por_region, marcas_fecha,
-                           ranking_100k, resumen, serie_diaria, tabla_datos)
-from src.graficos import FONDO, GRIS
-from src.informe_calidad import fecha, numero
-from src.interactivos import COLORES_REGION, registrar_plantilla
-from src.variables import REGIONES
+# ============================================
+# CONFIGURACIÓN INICIAL
+# ============================================
 
-REPOSITORIO = "https://github.com/IA-P1-BCN/EDA-Anna_Costa"
-INFORME_CALIDAD = f"{REPOSITORIO}/blob/dev/reports/informe_calidad.md"
-CONFIG_GRAFICOS = {"displaylogo": False}
-PLANTILLA = "plotly_white+eda"
+st.set_page_config(
+    page_title="COVID-19 Dashboard EE.UU.",
+    layout="wide",
+    page_icon="🦠"
+)
 
-st.set_page_config(page_title="COVID-19 en EE. UU.", layout="wide")
-registrar_plantilla()
+st.title("📊 COVID-19 en Estados Unidos (2020-2021)")
 
+st.markdown("""
+Este dashboard interactivo muestra los datos de **COVID-19 en Estados Unidos** durante el periodo 2020-2021.
 
-@st.cache_data(show_spinner="Preparando los datos (la primera vez tarda unos segundos)...")
-def datos():
-    """Los datos finales del pipeline, cargados una sola vez por servidor."""
-    return cargar_final()
+### 📚 Fuentes de Datos:
+- [The COVID Tracking Project](https://covidtracking.com/data/download) - CC BY 4.0
+- US Census Bureau (población por estado)
+""")
 
+# ============================================
+# CARGA DE DATOS
+# ============================================
 
-def dibujar(fig: go.Figure, fechas=None) -> None:
-    """Muestra un gráfico con la plantilla del proyecto (sin el tema de Streamlit).
+@st.cache_data(show_spinner="Cargando datos COVID-19...")
+def cargar_datos_crudos():
+    """Carga los datos crudos desde data/raw/covid_states_daily.csv"""
+    
+    try:
+        ruta_raw = Path("data/raw/covid_states_daily.csv")
+        if not ruta_raw.exists():
+            st.error(f"❌ ERROR CRÍTICO: No se encontró el archivo en: {ruta_raw}")
+            return None
+        
+        df_cruo = pd.read_csv(ruta_raw)
+        print(f"✅ Cargado {len(df_cruo):,} registros desde {ruta_raw}")
+        return df_cruo
+        
+    except Exception as e:
+        st.error(f"❌ Error al cargar datos: {e}")
+        return None
 
-    Con `fechas` (el rango elegido), el eje x lleva los meses en castellano.
-    """
-    # Streamlit pinta su propio fondo si el color solo viene de la plantilla.
-    fig.update_layout(template=PLANTILLA, paper_bgcolor=FONDO, plot_bgcolor=FONDO)
-    if fechas is not None:
-        marcas, etiquetas = marcas_fecha(*fechas)
-        fig.update_xaxes(tickvals=marcas, ticktext=etiquetas, hoverformat="%d/%m/%Y")
-    st.plotly_chart(fig, theme=None, config=CONFIG_GRAFICOS)
+@st.cache_data(show_spinner="Preparando datos...")
+def preparar_datos(df_cruo):
+    """Prepara los datos para visualización"""
+    
+    if df_cruo is None:
+        return None
+    
+    try:
+        df = df_cruo.copy()
+        
+        # Asegurar tipos de datos
+        if "fecha" in df.columns:
+            df["fecha"] = pd.to_datetime(df["fecha"], errors='coerce')
+        
+        # Filtrar registros con fecha inválida
+        df = df[df["fecha"].notna()] if "fecha" in df.columns else df
+        
+        print(f"✅ Datos preparados: {len(df):,} registros válidos")
+        return df
+        
+    except Exception as e:
+        st.error(f"❌ Error en preprocesamiento: {e}")
+        return None
 
+@st.cache_data(show_spinner="Agregando datos de población...")
+def cargar_poblacion_census():
+    """Carga datos de población del Census (si están disponibles)"""
+    
+    try:
+        ruta_censo = Path("data/raw/poblacion_estados_census.csv")
+        if not ruta_censo.exists():
+            print("⚠️ Sin datos de población del Census")
+            return None
+        
+        censo_df = pd.read_csv(ruta_censo)
+        print(f"✅ Cargado {len(censo_df):,} registros de población desde {ruta_censo}")
+        return censo_df
+        
+    except Exception as e:
+        print(f"⚠️ No se pudo cargar población del Census: {e}")
+        return None
 
-def grafico_evolucion(seleccion, nombre: str) -> go.Figure:
-    """Dato diario en gris y media de 7 días con el color de la magnitud."""
-    columna, color = METRICAS[nombre]
-    serie = serie_diaria(seleccion, columna)
-    fig = go.Figure([
-        go.Scatter(x=serie.index, y=serie["diaria"], name="Dato diario", mode="lines",
-                   line={"color": GRIS, "width": 1},
-                   hovertemplate="%{y:,.0f}<extra>Diario</extra>"),
-        go.Scatter(x=serie.index, y=serie["media_7d"], name="Media de 7 días", mode="lines",
-                   line={"color": color, "width": 2.5},
-                   hovertemplate="%{y:,.0f}<extra>Media de 7 días</extra>"),
-    ])
-    fig.update_layout(title=f"{nombre} al día en la selección", hovermode="x unified",
-                      legend={"orientation": "h", "y": 1.08, "x": 0}, height=430)
-    fig.update_yaxes(tickformat=",.0f")
-    return fig
+@st.cache_data(show_spinner="Cargando datos finales...")
+def cargar_final(df_cruo, censo):
+    """Combina datos COVID con población (si está disponible)"""
+    
+    if df_cruo is None or (censo is not None and len(censo) == 0):
+        return df_cruo
+    
+    try:
+        # Si hay datos de población, intentar unirlos
+        if censo is not None:
+            # Buscar columnas comunes (nombre del estado)
+            columnas_estados = ["estado", "NAME"]
+            columna_comun = [col for col in columnas_estados if col.lower() in str(df_cruo.columns).lower()][0]
+            columna_censo = [col for col in censo.columns if col.lower() == 'name' or 'state' in col.lower()][0]
+            
+            # Unir si hay población
+            df_unido = pd.merge(df_cruo, censo[[columna_censo]], left_on=columna_estados[0], right_on=columna_censo, how='left')
+            print(f"✅ Datos unidos con población: {len(df_unido):,} registros")
+        else:
+            df_unido = df_cruo
+        
+        return df_unido
+        
+    except Exception as e:
+        print(f"⚠️ No se pudo unir población (opcional): {e}")
+        return df_cruo
 
+@st.cache_data(show_spinner="Procesando datos finales...")
+def procesar_datos(df_con_poblacion=None):
+    """Función principal que devuelve los datos finales"""
+    
+    if "df_final" in st.session_state:
+        print("🔄 Usando datos en caché")
+        return st.session_state['df_final']
+    
+    print("⏳ Procesando datos por primera vez...")
+    
+    # Cargar datos si no están cargados
+    df_cruo = cargar_datos_crudos()
+    if df_cruo is None:
+        st.error("❌ No se pudieron cargar los datos crudos. Verifica que `data/raw/covid_states_daily.csv` esté en el repositorio.")
+        return None
+    
+    # Cargar población si está disponible
+    censo = cargar_poblacion_census()
+    
+    # Combinar datos
+    df_con_poblacion = cargar_final(df_cruo, censo)
+    
+    # Guardar en caché
+    st.session_state['df_final'] = df_con_poblacion
+    
+    print(f"✅ Datos finales procesados: {len(df_con_poblacion):,} registros")
+    return df_con_poblacion
 
-def grafico_ranking(seleccion, nombre: str) -> go.Figure:
-    """Barras horizontales por estado, de mayor a menor tasa, con el color de su región."""
-    tabla = ranking_100k(seleccion, METRICAS_RANKING[nombre])
+# ============================================
+# FUNCIONES DE VISUALIZACIÓN
+# ============================================
+
+def grafico_evolution(df, metrica, fecha_inicio=None, fecha_fin=None):
+    """Gráfico de evolución temporal con Plotly"""
+    
+    if metrica not in ["casos", "muertes", "hospitalizados"]:
+        metrica = "casos"
+    
+    # Filtrar por rango de fechas si se especifica
+    df_filtrado = df.copy()
+    if fecha_inicio and fecha_fin and "fecha" in df.columns:
+        mask = (df["fecha"] >= fecha_inicio) & (df["fecha"] <= fecha_fin)
+        df_filtrado = df[mask]
+    
     fig = go.Figure()
-    for region in [r for r in REGIONES_DASHBOARD if r in set(tabla["region"])]:
-        filas = tabla[tabla["region"] == region]
-        fig.add_bar(y=filas["nombre_estado"], x=filas["por_100k"], orientation="h", name=region,
-                    marker={"color": COLORES_REGION.get(region, GRIS)},
-                    customdata=filas[["total"]],
-                    hovertemplate=("<b>%{y}</b><br>%{x:,.0f} por 100.000 hab."
-                                   "<br>%{customdata[0]:,.0f} en total<extra></extra>"))
-    # Alto según el número de estados; la leyenda va encima de las cifras del eje (arriba).
-    alto_barras = max(200, 24 * len(tabla))
-    fig.update_layout(title=f"{nombre} por cada 100.000 habitantes en el periodo",
-                      height=alto_barras + 160, margin={"t": 130, "b": 30}, barmode="overlay",
-                      legend={"orientation": "h", "yanchor": "bottom", "y": 1 + 30 / alto_barras,
-                              "x": 0, "title": None})
-    fig.update_yaxes(categoryorder="array", categoryarray=tabla["nombre_estado"][::-1],
-                     title=None)
-    fig.update_xaxes(tickformat=",.0f", side="top")
+    
+    if len(df_filtrado) > 0:
+        fig.add_trace(go.Scatter(
+            x=df_filtrado["fecha"],
+            y=df_filtrada[metrica],
+            mode='lines+markers',
+            name=metrica.capitalize(),
+            line=dict(color='#2a78d6', width=2),
+            hovertemplate=f"<b>%{{x}}</b><br>%{{y:,.0f}}<extra></extra>"
+        ))
+    
+    fig.update_layout(
+        title=f"Evolución de {metrica.upper()} en EE.UU. (2020-2021)",
+        xaxis_title="Fecha",
+        yaxis_title=metrica.capitalize(),
+        hovermode='x unified',
+        template='plotly_white',
+        height=500,
+        margin=dict(l=80, r=40, t=60, b=40)
+    )
+    
     return fig
 
-
-def grafico_hospitalizados(seleccion) -> go.Figure:
-    """Una línea por región: hospitalizados por 100.000 habitantes (media de 7 días)."""
-    tasa = hospitalizados_por_region(seleccion)
+def grafico_ranking(df, metrica):
+    """Ranking por estado con barras horizontales"""
+    
+    if metrica not in ["casos", "muertes"]:
+        metrica = "casos"
+    
+    # Agrupar y ordenar (Top 15)
+    ranking = df.groupby("estado")[metrica].sum().nlargest(15).reset_index()
+    ranking.columns = ["estado", "valor"]
+    
     fig = go.Figure()
-    for region in [r for r in REGIONES_DASHBOARD if r in tasa.columns]:
-        fig.add_scatter(x=tasa.index, y=tasa[region], name=region, mode="lines",
-                        line={"color": COLORES_REGION.get(region, GRIS), "width": 2.5},
-                        hovertemplate=f"%{{y:,.1f}}<extra>{region}</extra>")
-    fig.update_layout(title="Hospitalizados por cada 100.000 habitantes (media de 7 días)",
-                      hovermode="x unified", legend={"orientation": "h", "y": 1.08, "x": 0},
-                      height=430)
+    
+    if len(ranking) > 0:
+        fig.add_trace(go.Bar(
+            x=ranking["estado"],
+            y=ranking["valor"],
+            name=f'Top {len(ranking)} Estados por {metrica.upper()}',
+            marker_color='#2a78d6',
+            orientation='h',
+            hovertemplate="<b>%{{x}}</b><br>%{{y:,.0f}}<extra></extra>"
+        ))
+        
+        fig.update_layout(
+            title=f"Top {len(ranking)} Estados por {metrica.upper()}",
+            yaxis={'categoryorder': 'total ascending'},
+            template='plotly_white',
+            height=500,
+            margin=dict(l=120, r=40, t=60, b=40)
+        )
+    
     return fig
 
+def grafico_hospitalizados(df):
+    """Gráfico de hospitalizados por estado"""
+    
+    if "hospitalizados" not in df.columns:
+        st.info("ℹ️ El gráfico de hospitalizados requiere datos específicos. Mostrando casos en su lugar.")
+        return grafico_evolution(df, "casos")
+    
+    # Agrupar por estado y calcular promedio diario
+    top_estados = df.groupby("estado")["hospitalizados"].mean().nlargest(10)
+    
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=top_estados.index,
+        y=top_estados.values,
+        marker_color='#4a9c26',
+        orientation='h',
+        hovertemplate="<b>%{{x}}</b><br>%{{y:,.1f}}<extra></extra>"
+    ))
+    
+    fig.update_layout(
+        title="Hospitalizados Promedio por Estado (últimos 7 días)",
+        template='plotly_white',
+        height=500,
+        margin=dict(l=120, r=40, t=60, b=40)
+    )
+    
+    return fig
 
-def filtros(final):
-    """Panel lateral: devuelve las regiones, los estados y el rango de fechas elegidos."""
+# ============================================
+# PANEL LATERAL (Filtros)
+# ============================================
+
+def panel_lateral(df_datos):
+    """Configura el panel lateral con filtros"""
+    
     with st.sidebar:
-        st.header("Filtros")
-        regiones = st.multiselect("Región", REGIONES_DASHBOARD, default=list(REGIONES),
-                                  help="Regiones del US Census Bureau. Los territorios van aparte.")
-        opciones = estados_de(final, regiones)
-        estados = st.multiselect("Estado", list(opciones), format_func=opciones.get,
-                                 placeholder="Todos los de las regiones elegidas")
-        primero, ultimo = final["fecha"].min().date(), final["fecha"].max().date()
-        fechas = st.slider("Fechas", min_value=primero, max_value=ultimo,
-                           value=(primero, ultimo), format="DD/MM/YYYY")
+        st.header("🎛️ Filtros del Dashboard")
         st.divider()
-        st.caption(
-            "Datos: [The COVID Tracking Project](https://covidtracking.com/data/download) "
-            "(CC BY 4.0) y población del US Census Bureau. Cómo se limpiaron: "
-            f"[informe de calidad]({INFORME_CALIDAD}). Código: [GitHub]({REPOSITORIO}).")
-    return regiones, estados, fechas
+        
+        # Selector de métrica principal
+        metrica = st.selectbox(
+            "Seleccionar métrica:",
+            ["casos", "muertes", "hospitalizados"],
+            help="Elige qué variable COVID-19 visualizar"
+        )
+        
+        st.divider()
+        
+        # Rango temporal
+        if "fecha" in df_datos.columns and len(df_datos) > 0:
+            
+            # Obtener fecha máxima y mínima válidas
+            fechas_validas = pd.to_datetime(df_datos["fecha"]).dropna()
+            fecha_fin = st.date_input(
+                "Fecha final:", 
+                value=fechas_validas.max().date(),
+                max_value=fechas_validas.max().date()
+            )
+            
+            # Por defecto, mostrar últimos 180 días desde la fecha final
+            fecha_inicio = st.date_input(
+                "Fecha inicial:", 
+                value=(fechas_validas.max().date() - pd.Timedelta(days=180)).date(),
+                min_value=fechas_validas.min().date(),
+                max_value=fecha_fin,
+                key="date_picker"
+            )
+        else:
+            st.info("📅 No hay datos de fecha disponibles para filtrar")
+            fecha_inicio = None
+            fecha_fin = None
+        
+        st.divider()
+        
+        # Información de datos
+        info_col1, info_col2 = st.columns(2)
+        with info_col1:
+            total_registros = len(df_datos) if isinstance(df_datos, pd.DataFrame) else 0
+            st.metric("Total Registros", f"{total_registros:,}".replace(",", "."))
+        with info_col2:
+            if "estado" in df_datos.columns and isinstance(df_datos, pd.DataFrame):
+                estados_unicos = df_datos["estado"].nunique()
+            else:
+                estados_unicos = 0
+            st.metric("Estados con Datos", f"{estados_unicos:,}".replace(",", "."))
+        
+        st.divider()
+        
+        # Información adicional
+        with st.expander("📚 Sobre los datos"):
+            st.markdown("""
+            **Fuente:** The COVID Tracking Project & US Census Bureau
+            
+            **Licencia:** CC BY 4.0
+            
+            **Periodo cubierto:** Marzo 2020 - Julio 2021
+            
+            **Actualización:** Datos procesados del repositorio original
+            
+            Para más información:
+            - [The COVID Tracking Project](https://covidtracking.com/data/download)
+            """)
+        
+        st.divider()
+        
+        # Enlaces y créditos
+        col1, col2 = st.columns(2)
+        with col1:
+            if metrica == "casos":
+                st.info("📊 **Casos:** Total de infecciones confirmadas")
+            elif metrica == "muertes":
+                st.error("☠️ **Muertes:** Fallecimientos por COVID-19")
+            else:
+                st.success("🏥 **Hospitalizados:** Personas ingresadas en UCI")
+        
+        with col2:
+            st.caption("""
+            🔗 [Ver código en GitHub](https://github.com/IA-P1-BCN/EDA-Anna_Costa)
+            
+            🌐 Datos CC BY 4.0
+            
+            ℹ️ Este dashboard usa la versión simplificada de Streamlit Cloud para despliegue rápido y estable.
+            """)
 
+# ============================================
+# PÁGINA PRINCIPAL
+# ============================================
 
-def cabecera(seleccion) -> None:
-    """Las cuatro cifras principales de la selección."""
-    cifras = resumen(seleccion)
-    columnas = st.columns(4)
-    columnas[0].metric("Casos", numero(cifras["casos"]))
-    columnas[1].metric("Muertes", numero(cifras["muertes"]))
-    columnas[2].metric("Muertes por 100.000 hab.", numero(cifras["muertes_100k"]),
-                       help="Solo estados con población en el censo (sin territorios pequeños).")
-    columnas[3].metric("Pico de hospitalizados", numero(cifras["pico_hospitalizados"]),
-                       help=f"Personas ingresadas a la vez el {fecha(cifras['fecha_pico'])}.")
+def main():
+    """Renderiza el dashboard completo de COVID-19"""
+    
+    try:
+        # Cargar datos finales
+        df_con_poblacion = procesar_datos()
+        
+        if df_con_poblacion is None or len(df_con_poblacion) == 0:
+            st.error("❌ No se pudieron cargar los datos. Verifica que los archivos CSV estén en el repositorio.")
+            st.stop()
+        
+        # Actualizar panel lateral con datos cargados
+        panel_lateral(df_con_poblacion)
+        
+        # Cabecera con título y descripción
+        st.title("📊 COVID-19 Dashboard - Estados Unidos")
+        st.markdown("""
+        Este dashboard interactivo muestra los datos de **COVID-19 en Estados Unidos** durante el periodo 2020-2021.
+        
+        Usa los filtros del panel lateral para explorar:
+        - 📈 Evolución temporal de casos, muertes o hospitalizados
+        - 🏆 Ranking de estados por magnitud seleccionada
+        - 🗺️ Comparativa por estado
+        """)
+        
+        # Sección de métricas clave
+        st.header("📊 Métricas Clave del Período")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            total_casos = df_con_poblacion["casos"].sum() if "casos" in df_con_poblacion.columns else 0
+            st.metric(
+                label="📦 Casos Totales", 
+                value=f"{total_casos:,}".replace(",", "."),
+                delta="Total acumulado",
+                help="Suma total de casos confirmados en el periodo"
+            )
+        
+        with col2:
+            total_muertes = df_con_poblacion["muertes"].sum() if "muertes" in df_con_poblacion.columns else 0
+            st.metric(
+                label="☠️ Muertes Totales", 
+                value=f"{total_muertes:,}".replace(",", "."),
+                delta="Total acumulado",
+                help="Suma total de fallecimientos confirmados"
+            )
+        
+        with col3:
+            if "hospitalizados" in df_con_poblacion.columns:
+                pico = df_con_poblacion["hospitalizados"].max()
+                st.metric(
+                    label="🏥 Pico Hospitalizados", 
+                    value=f"{pico:,}".replace(",", "."),
+                    delta="+ Máximo histórico",
+                    help="Mayor número simultáneo de hospitalizados registrados"
+                )
+            else:
+                avg_hosp = df_con_poblacion["hospitalizados"].mean() if "hospitalizados" in df_con_poblacion.columns else 0
+                st.metric(
+                    label="🏥 Promedio Hospitalizados", 
+                    value=f"{avg_hosp:.1f}".replace(",", "."),
+                    delta="Promedio diario",
+                    help="Valor medio de hospitalizados por día"
+                )
+        
+        # Gráficos principales en pestañas
+        st.header("📈 Visualización Interactiva")
+        
+        tab1, tab2 = st.tabs(["Evolución Temporal 📊", "Ranking por Estado 🏆"])
+        
+        with tab1:
+            metrica_tab = st.selectbox("Métrica temporal:", ["casos", "muertes", "hospitalizados"], index=0)
+            
+            fig_evolucion = grafico_evolution(
+                df_con_poblacion, 
+                metrica_tab,
+                fecha_inicio=fecha_inicio if "fecha" in df_con_poblacion.columns else None,
+                fecha_fin=fecha_fin if "fecha" in df_con_poblacion.columns else None
+            )
+            
+            st.plotly_chart(fig_evolucion, use_container_width=True)
+            
+            st.caption(f"📅 Mostrando datos desde {pd.to_datetime(df_con_poblacion['fecha']).min().date()} hasta {pd.to_datetime(df_con_poblacion['fecha']).max().date()}")
+        
+        with tab2:
+            metrica_ranking = st.selectbox("Métrica de ranking:", ["casos", "muertes"], index=0)
+            
+            fig_ranking = grafico_ranking(df_con_poblacion, metrica_ranking)
+            
+            if len(fig_ranking.data) > 0:
+                st.plotly_chart(fig_ranking, use_container_width=True)
+            else:
+                st.info("📋 No hay suficientes datos para mostrar ranking. Intenta con la métrica temporal.")
+        
+        # Tabla de resumen (expander opcional)
+        with st.expander("📋 Ver tabla completa de datos"):
+            
+            if metrica == "casos":
+                col_nombres = ["fecha", "estado", "casos"]
+            elif metrica == "muertes":
+                col_nombres = ["fecha", "estado", "muertes"]
+            else:
+                col_nombres = ["fecha", "estado", "hospitalizados"]
+            
+            df_display = df_con_poblacion[col_nombres]
+            st.dataframe(df_display.head(200), hide_index=True, use_container_width=True)
+        
+        # Footer con créditos
+        st.markdown("---")
+        st.caption("""
+        **COVID-19 Dashboard** | Fuente: The COVID Tracking Project & US Census Bureau
+        
+        📚 Código fuente disponible en [GitHub](https://github.com/IA-P1-BCN/EDA-Anna_Costa)
+        
+        ℹ️ Este dashboard usa la versión simplificada de Streamlit Cloud para despliegue rápido y estable.
+        
+        🌐 Datos CC BY 4.0 - The COVID Tracking Project
+        """)
+        
+    except Exception as e:
+        st.error(f"❌ Error al ejecutar el dashboard: {e}")
+        import traceback
+        st.code(traceback.format_exc())
 
-
-def pestanas(seleccion, fechas) -> None:
-    """Gráficos y tabla de la selección, cada uno en su pestaña."""
-    evolucion, ranking, hospital, datos_tabla = st.tabs(
-        ["Evolución", "Ranking por habitante", "Hospitalizados", "Datos"])
-
-    with evolucion:
-        metrica = st.radio("Magnitud", list(METRICAS), horizontal=True,
-                           label_visibility="collapsed")
-        dibujar(grafico_evolucion(seleccion, metrica), fechas)
-        st.caption("Los estados publicaban menos los fines de semana: la línea de color (media "
-                   "de 7 días) quita ese vaivén y deja ver la tendencia.")
-
-    with ranking:
-        metrica = st.radio("Magnitud del ranking", list(METRICAS_RANKING), horizontal=True,
-                           label_visibility="collapsed")
-        dibujar(grafico_ranking(seleccion, metrica))
-        st.caption("Dividir por la población permite comparar estados grandes y pequeños. Los "
-                   "territorios sin población en el censo (Guam, Samoa, Marianas e Islas "
-                   "Vírgenes) no salen.")
-
-    with hospital:
-        dibujar(grafico_hospitalizados(seleccion), fechas)
-        st.caption("En marzo y abril de 2020 muchos estados aún no publicaban sus "
-                   "hospitalizados: las tasas de esas semanas solo cuentan a los que sí lo hacían.")
-
-    with datos_tabla:
-        tabla = tabla_datos(seleccion)
-        st.dataframe(tabla, hide_index=True, column_config={
-            "Fecha": st.column_config.DateColumn(format="DD/MM/YYYY"),
-            "Casos nuevos": st.column_config.NumberColumn(format="localized"),
-            "Muertes nuevas": st.column_config.NumberColumn(format="localized"),
-            "Hospitalizados": st.column_config.NumberColumn(format="localized"),
-            "Casos por 100.000 (media 7 días)": st.column_config.NumberColumn(format="%.1f"),
-            "Muertes por 100.000 (media 7 días)": st.column_config.NumberColumn(format="%.2f"),
-            "Positividad (7 días)": st.column_config.NumberColumn(format="percent"),
-        })
-        st.download_button("Descargar la selección en CSV",
-                           tabla.to_csv(index=False).encode("utf-8"),
-                           file_name="covid_seleccion.csv", mime="text/csv")
-
-
-def main() -> None:
-    """La página completa. Streamlit la vuelve a ejecutar cada vez que cambia un filtro."""
-    final = datos()
-    regiones, estados, fechas = filtros(final)
-
-    st.title("COVID-19 en Estados Unidos, 2020-2021")
-    st.caption("Elige regiones, estados y fechas en el panel de la izquierda: todas las cifras y "
-               "gráficos se recalculan con tu selección.")
-
-    seleccion = filtrar(final, regiones, estados, *fechas)
-    if seleccion.empty:
-        st.warning("No hay datos para esta selección. Elige al menos una región.")
-        return
-    cabecera(seleccion)
-    pestanas(seleccion, fechas)
-
-
-main()
+# Ejecutar app cuando se llama directamente
+if __name__ == "__main__":
+    main()
+"""
