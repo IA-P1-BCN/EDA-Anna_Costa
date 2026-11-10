@@ -51,7 +51,6 @@ if "initialized" not in st.session_state:
 with st.sidebar:
     st.header("Configuración")
     
-    # Definir columnas disponibles para el selector de métricas
     base_metrics = ['casos_acum', 'muertes_acum', 'hospitalizados_actuales', 'tests_acum']
     other_metrics = [col for col in df.columns if col not in base_metrics and 'acum' not in col.lower()]
     metric_columns = sorted(base_metrics + other_metrics, key=str.lower)
@@ -67,7 +66,6 @@ with st.sidebar:
     
     st.divider()
     
-    # Inicializar filtros temporales con HOY en lugar de última fecha del dataset
     today = pd.Timestamp("today")
     
     date_option = st.radio(
@@ -76,7 +74,6 @@ with st.sidebar:
         horizontal=True
     )
     
-    # Setear filtros según selección del usuario
     if date_option == "Desde el inicio":
         st.session_state.date_filter = None
         st.info("Mostrar todos los datos disponibles")
@@ -101,13 +98,12 @@ if st.session_state.date_filter:
     filtered_df = df.loc[mask].copy()
 
 # ============================================
-# SECCIÓN 1: TARJETAS DE MÉTRICAS - ÚNICA MÉTRICA
+# SECCIÓN 1: TARJETAS DE MÉTRICAS
 # ============================================
 
 st.header("Resumen del Periodo")
 
 if not filtered_df.empty and metric_col in filtered_df.columns:
-    # Calcular totales correctamente (evitar NameError)
     total_val = float(filtered_df[metric_col].sum()) if pd.api.types.is_numeric_dtype(filtered_df[metric_col]) else 0
     
     cols = st.columns(4)
@@ -135,24 +131,20 @@ if not filtered_df.empty and metric_col in filtered_df.columns:
         st.metric(label="Estados con datos", value=state_count)
 
 # ============================================
-# SECCIÓN 1.5: GRÁFICO DE DISTRIBUCIÓN POR ESTADOS (VISUALIZACIÓN AGREGADA)
+# SECCIÓN 1.5: GRÁFICO DE DISTRIBUCIÓN POR ESTADOS
 # ============================================
 
 st.header("📊 Top Estados por Impacto", divider="blue")
 
 if not filtered_df.empty and metric_col in filtered_df.columns:
-    # Agrupar y sumar por estado
     state_summary = filtered_df.groupby('estado').agg({metric_col: 'sum'}).rename(columns={metric_col: 'Total'})
     
-    # Añadir otras métricas si existen
     for col in ['muertes_acum', 'hospitalizados_actuales']:
         if col in filtered_df.columns:
             state_summary[col] = filtered_df.groupby('estado')[col].sum()
     
-    # Ordenar y tomar top 15
     state_summary = state_summary.sort_values('Total', ascending=False).head(15)
     
-    # Crear gráfico de barras horizontales interactivas
     fig = px.bar(
         state_summary.reset_index(),
         x='estado',
@@ -163,11 +155,7 @@ if not filtered_df.empty and metric_col in filtered_df.columns:
         color_continuous_scale='Blues'
     )
     
-    fig.update_layout(
-        height=400,
-        yaxis={'categoryorder': 'total ascending'}
-    )
-    
+    fig.update_layout(height=400, yaxis={'categoryorder': 'total ascending'})
     fig.update_traces(textposition='outside')
     
     st.plotly_chart(fig, use_container_width=True)
@@ -186,8 +174,6 @@ if not filtered_df.empty and metric_col in filtered_df.columns:
             state_summary[col] = filtered_df.groupby('estado')[col].sum()
     
     state_summary.index.name = None
-    
-    # Mostrar top 25 o todos si son menos
     show_limit = min(25, len(state_summary))
     display_df = state_summary.sort_values(metric_col, ascending=False).head(show_limit)
     
@@ -200,17 +186,13 @@ if not filtered_df.empty and metric_col in filtered_df.columns:
 st.header("Comparación de Métricas", divider="blue")
 
 if not filtered_df.empty:
-    # Usar solo columnas principales para comparación (no filtradas por metric_col)
     base_columns = ['casos_acum', 'muertes_acum', 'hospitalizados_actuales']
     available_metrics = [col for col in base_columns if col in filtered_df.columns]
     
-    # Mostrar siempre que haya al menos 2 columnas principales
     if len(available_metrics) >= 2:
-        # Usar la primera columna para ordenar
         sort_column = available_metrics[0]
         compare_data = filtered_df.groupby('estado')[available_metrics].sum().reset_index()
         
-        # Ordenar por la métrica y limitar a top 20
         try:
             compare_df = compare_data.sort_values(sort_column, ascending=False).head(20).rename(
                 columns={col: col.replace('_', ' ').title() for col in available_metrics}
@@ -226,19 +208,16 @@ if not filtered_df.empty:
 st.header("🔗 Correlación entre Métricas", divider="blue")
 
 if not filtered_df.empty:
-    # Seleccionar solo métricas numéricas principales
     numeric_cols = [col for col in filtered_df.columns 
                     if col in ['casos_acum', 'muertes_acum', 'hospitalizados_actuales', 'tests_acum']
                     and 'poblacion' not in col.lower()]
     
     if len(numeric_cols) >= 2:
-        # Crear matriz de correlación
         try:
             correlation_matrix = filtered_df[numeric_cols].corr().round(3)
             
             fig = px.imshow(
                 correlation_matrix,
-                annotations=True,
                 text_auto='.2f',
                 color_continuous_scale='RdBu_r',
                 title="Matriz de Correlación entre Métricas",
@@ -246,7 +225,6 @@ if not filtered_df.empty:
             )
             
             fig.update_layout(height=400)
-            
             st.plotly_chart(fig, use_container_width=True)
         except Exception as e:
             st.error(f"Error al generar matriz de correlación: {str(e)}")
@@ -258,47 +236,43 @@ if not filtered_df.empty:
 st.header("📅 Tendencias Temporales", divider="blue")
 
 if not filtered_df.empty and 'fecha' in filtered_df.columns:
-    # Agregar columna de año-semana para agrupación temporal
     grouped = filtered_df.copy()
+    
     try:
         grouped['year_week'] = grouped['fecha'].dt.to_period('W')
         
-        # Agrupar por semana y métrica seleccionada
         if metric_col in filtered_df.columns and 'year_week' in grouped.columns:
             weekly_trend = grouped.groupby(['year_week', 'estado'])[metric_col].sum().reset_index()
             
-            # Tomar top 5 estados para la gráfica temporal
-            try:
-                top_states = weekly_trend.groupby('estado')[metric_col].sum().nlargest(5, default=None).index.tolist()
+            # Top 5 estados sin usar default=None (no existe en Python 3.14)
+            top_states_sorted = weekly_trend.groupby('estado')[metric_col].sum().sort_values(ascending=False).head(5)
+            top_states = top_states_sorted.index.tolist()
+            
+            if len(top_states) > 0 and metric_col in grouped.columns:
+                fig = px.line(
+                    weekly_trend[weekly_trend['estado'].isin(top_states)],
+                    x='year_week',
+                    y=metric_col,
+                    color='estado',
+                    title=f"Tendencia Semanal de {metric_col.replace('_', ' ').title()} (Top 5 Estados)",
+                    markers=True,
+                    hover_data=['estado']
+                )
                 
-                if len(top_states) > 0 and metric_col in grouped.columns:
-                    fig = px.line(
-                        weekly_trend[weekly_trend['estado'].isin(top_states)],
-                        x='year_week',
-                        y=metric_col,
-                        color='estado',
-                        title=f"Tendencia Semanal de {metric_col.replace('_', ' ').title()} (Top 5 Estados)",
-                        markers=True,
-                        hover_data=['estado']
-                    )
-                    
-                    fig.update_layout(height=400)
-                    fig.update_xaxes(tickformat='%d/%m')
-                    
-                    st.plotly_chart(fig, use_container_width=True)
-            except Exception as e:
-                st.error(f"Error al generar gráfico temporal: {str(e)}")
+                fig.update_layout(height=400)
+                fig.update_xaxes(tickformat='%d/%m')
+                
+                st.plotly_chart(fig, use_container_width=True)
     except Exception as e:
         st.info("No se pudo agregar la columna de semanas (posible problema con fechas)")
 
 # ============================================
-# SECCIÓN 6: GRÁFICO DE DISTRIBUCIÓN POR REGION (SI EXISTE)
+# SECCIÓN 6: GRÁFICO DE DISTRIBUCIÓN POR REGION
 # ============================================
 
 st.header("🗺️ Distribución por Región", divider="blue")
 
 if not filtered_df.empty and 'region' in filtered_df.columns:
-    # Agrupar por región
     regional_summary = filtered_df.groupby('region').agg({metric_col: 'sum'}).rename(
         columns={metric_col: 'Total'}
     )
@@ -307,7 +281,6 @@ if not filtered_df.empty and 'region' in filtered_df.columns:
         if col in filtered_df.columns:
             regional_summary[col] = filtered_df.groupby('region')[col].sum()
     
-    # Ordenar y tomar top 10
     try:
         regional_summary = regional_summary.sort_values('Total', ascending=False).head(10)
         
