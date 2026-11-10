@@ -163,20 +163,22 @@ if not filtered_df.empty and metric_col in filtered_df.columns:
 
 st.header("Comparación de Métricas")
 
-if not filtered_df.empty and metric_col in filtered_df.columns:
+if not filtered_df.empty:
+    # Usar solo columnas principales para comparación (no filtradas por metric_col)
     base_columns = ['casos_acum', 'muertes_acum', 'hospitalizados_actuales']
     available_metrics = [col for col in base_columns if col in filtered_df.columns]
     
-    if len(available_metrics) > 1:
-        metric_sort_column = metric_col
-    compare_data = filtered_df.groupby('estado')[available_metrics].sum().reset_index()
-    
-    # Ordenar por métrica original y limitar a top 20
-    if metric_sort_column in compare_data.columns:
-        compare_df = compare_data.sort_values(metric_sort_column, ascending=False).head(20).rename(
+    # Mostrar siempre que haya al menos 2 columnas principales
+    if len(available_metrics) >= 2:
+        # Usar la primera columna para ordenar
+        sort_column = available_metrics[0]
+        compare_data = filtered_df.groupby('estado')[available_metrics].sum().reset_index()
+        
+        # Ordenar por la métrica y limitar a top 20
+        compare_df = compare_data.sort_values(sort_column, ascending=False).head(20).rename(
             columns={col: col.replace('_', ' ').title() for col in available_metrics}
         )
-        st.dataframe(compare_df.round(0), use_container_width=True)
+        st.dataframe(compare_df.round(2), use_container_width=True, height=350)
 
 # ============================================
 # FOOTER
