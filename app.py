@@ -155,7 +155,7 @@ if not filtered_df.empty and metric_col in filtered_df.columns:
     state_summary.index.name = None
     state_summary = state_summary.sort_values(metric_col, ascending=False).head(25)
     
-    st.dataframe(state_summary.style.format('{:.0f}'), use_container_width=True)
+    st.dataframe(state_summary.round(0), use_container_width=True)
 
 # ============================================
 # SECCIÓN 3: COMPARACIÓN DE MÚLTIPLES MÉTRICAS
@@ -174,7 +174,7 @@ if not filtered_df.empty and metric_col in filtered_df.columns:
         col_names = {col: col.replace('_', ' ').title() for col in available_metrics}
         compare_df.rename(columns=col_names, inplace=True)
         
-        st.dataframe(compare_df.style.format('{:.0f}'), use_container_width=True)
+        st.dataframe(compare_df.round(0).head(20), use_container_width=True)
 
 # ============================================
 # FOOTER
