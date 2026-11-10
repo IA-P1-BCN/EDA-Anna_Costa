@@ -63,10 +63,7 @@ if st.session_state.date_filter:
     filtered_df = df.loc[mask].copy()
     st.caption(f"📊 Filtrado: {len(filtered_df):,} registros después del filtro temporal")
 
-# ============================================
 # SECCIÓN 1: TARJETAS DE MÉTRICAS
-# ============================================
-
 st.header("Resumen del Periodo")
 
 if not filtered_df.empty and metric_col in filtered_df.columns:
@@ -92,24 +89,18 @@ if not filtered_df.empty and metric_col in filtered_df.columns:
         state_count = filtered_df['estado'].nunique()
         st.metric(label="Estados con datos", value=state_count)
 
-# ============================================
-# SECCIÓN 2: GRÁFICO DE BARRAS HORIZONTALES CORREGIDO
-# ============================================
-
+# SECCIÓN 2: GRÁFICO DE BARRAS HORIZONTALES
 st.header("📊 Top Estados por Impacto", divider="blue")
 
 if not filtered_df.empty and metric_col in filtered_df.columns:
-    # Agrupar y sumar por estado - USAR RESET_INDEX CORRECTAMENTE
     state_summary = filtered_df.groupby('estado')[metric_col].sum().reset_index()
     
     if len(state_summary) > 0 and pd.api.types.is_numeric_dtype(state_summary[metric_col]):
-        # Filtrar NaN si existen
         state_summary_clean = state_summary.dropna(subset=[metric_col])
         
         if len(state_summary_clean) > 0:
             top_15 = state_summary_clean.head(15)
             
-            # Crear gráfico de barras horizontales con sintaxis correcta
             fig = px.bar(top_15, x=metric_col, y='estado', orientation='h',
                          title=f"Top 15 Estados por {metric_col.replace('_', ' ').title()}",
                          color=metric_col, color_continuous_scale='Blues')
@@ -123,16 +114,12 @@ if not filtered_df.empty and metric_col in filtered_df.columns:
 else:
     st.warning(f"Métrica {metric_col} no disponible en el dataset")
 
-# ============================================
 # SECCIÓN 3: TABLA POR ESTADO
-# ============================================
-
 st.header("Datos por Estado", divider="blue")
 
 if not filtered_df.empty and metric_col in filtered_df.columns:
     state_summary = filtered_df.groupby('estado')[metric_col].sum()
     
-    # Filtrar NaN y ordenar
     state_summary_clean = state_summary.dropna().sort_values(ascending=False)
     
     if len(state_summary_clean) > 0:
@@ -143,10 +130,7 @@ if not filtered_df.empty and metric_col in filtered_df.columns:
     else:
         st.warning(f"No hay datos válidos para {metric_col}")
 
-# ============================================
-# SECCIÓN 4: COMPARACIÓN DE MÚLTIPLES MÉTRICAS
-# ============================================
-
+# SECCIÓN 4: COMPARACIÓN DE MÚLTIPLES MÉTRICAS (CORREGIDO)
 st.header("Comparación de Métricas", divider="blue")
 
 if not filtered_df.empty:
@@ -154,7 +138,6 @@ if not filtered_df.empty:
     available_metrics = [col for col in base_columns if col in filtered_df.columns]
     
     if len(available_metrics) >= 2:
-        # Crear dataframe de comparación correctamente
         compare_data_list = []
         
         for col in available_metrics:
@@ -164,24 +147,20 @@ if not filtered_df.empty:
                 compare_data_list.append(compare_df)
         
         if len(compare_data_list) >= 2:
-            # Fusionar todos los dataframes
             first_df = compare_data_list[0]
             for df in compare_data_list[1:]:
                 first_df = first_df.merge(df, on='estado', how='outer')
             
-            # Renombrar columnas
-            renamed_cols = {i+1: name.title().replace('_', ' ') for i, name in enumerate(available_metrics)}
-            first_df = first_df.rename(columns={col: name for col, name in zip(available_metrics, [name.title().replace('_', ' ') for name in available_metrics])})
+            col_names_original = available_metrics
+            col_names_display = [name.title().replace('_', ' ') for name in available_metrics]
+            first_df = first_df.rename(columns={orig: display for orig, display in zip(col_names_original, col_names_display)})
             
-            # Ordenar y limitar a top 20
-            first_df = first_df.sort_values(available_metrics[0], ascending=False).head(20)
+            sort_col = list(first_df.columns)[1]
+            first_df = first_df.sort_values(sort_col, ascending=False).head(20)
             
             st.dataframe(first_df.round(2), use_container_width=True, height=350)
 
-# ============================================
 # SECCIÓN 5: MATRIZ DE CORRELACIÓN
-# ============================================
-
 st.header("🔗 Correlación entre Métricas", divider="blue")
 
 if not filtered_df.empty:
@@ -200,10 +179,7 @@ if not filtered_df.empty:
         except Exception as e:
             st.error(f"Error al generar matriz de correlación: {str(e)}")
 
-# ============================================
-# SECCIÓN 6: TENDENCIAS TEMPORALES
-# ============================================
-
+# SECCIÓN 6: TENDENCIAS TEMPORALES (CORREGIDO)
 st.header("📅 Tendencias Temporales", divider="blue")
 
 if not filtered_df.empty and 'fecha' in filtered_df.columns:
@@ -211,17 +187,15 @@ if not filtered_df.empty and 'fecha' in filtered_df.columns:
         grouped = filtered_df.copy()
         
         if metric_col in filtered_df.columns:
-            # Verificar que la métrica tiene datos válidos
             valid_values = filtered_df[metric_col].dropna()
             
             if len(valid_values) > 0:
-                # Usar formato string para evitar problemas con fechas futuras
                 grouped['year_week'] = grouped['fecha'].dt.strftime('%Y-W%W')
                 
                 weekly_trend = grouped.groupby(['year_week', 'estado'])[metric_col].sum().reset_index()
                 
                 if len(weekly_trend) > 0:
-                    # Top 5 estados por métrica seleccionada
+                    # Top 5 estados por métrica seleccionada - USAR NLARGEST
                     top_5_by_metric = filtered_df.groupby('estado')[metric_col].sum().nlargest(5).index.tolist()
                     
                     if len(top_5_by_metric) > 0:
@@ -242,10 +216,7 @@ if not filtered_df.empty and 'fecha' in filtered_df.columns:
     except Exception as e:
         st.error(f"Error al generar gráfico temporal: {str(e)}")
 
-# ============================================
 # SECCIÓN 7: GRÁFICO DE REGIONES
-# ============================================
-
 st.header("🗺️ Distribución por Región", divider="blue")
 
 if not filtered_df.empty and 'region' in filtered_df.columns:
