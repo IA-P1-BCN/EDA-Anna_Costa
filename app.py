@@ -7,6 +7,7 @@ import numpy as np
 import plotly.express as px
 import datetime
 import streamlit as st
+import unicodedata
 
 # Configuración de página
 page_icon = ":hospital:"
@@ -111,21 +112,60 @@ def load_processed_data():
 
 def get_available_metrics(df):
     """Obtiene lista de métricas disponibles."""
-    return ['casos', 'muertes', 'hospitalizados'] + [col for col in df.columns if col not in ['casos', 'muertes', 'hospitalizados']]
+    metric_columns = [col for col in df.columns if col not in ['casos', 'muertes', 'hospitalizados']]
+    return ['casos', 'muertes', 'hospitalizados'] + metric_columns
+
+
+def format_metric_name_for_display(metric_name):
+    """Formatea el nombre de la métrica para mostrarla de forma legible."""
+    if pd.isna(metric_name) or not isinstance(metric_name, str):
+        return metric_name
+    
+    try:
+        # Normalizar Unicode (descompone caracteres acentuados)
+        normalized = unicodedata.normalize('NFD', metric_name)
+        
+        # Quitar acentos y espacios adicionales
+        metric_clean = ''.join(ch.replace('\u0301', '').replace(' ', '') for ch in normalized)
+        
+        # Capitalizar cada palabra (excepto artículos/preposiciones cortas)
+        words = metric_clean.lower().split()
+        capitalized_words = []
+        
+        stop_words = {'de', 'la', 'el', 'y', 'al', 'en', 'un', 'una', 'con', 'para'}
+        
+        for word in words:
+            if len(word) > 2 and word not in stop_words:
+                capitalized_words.append(word.capitalize())
+            else:
+                capitalized_words.append(word)
+        
+        return ' '.join(capitalized_words)
+    except Exception as e:
+        print(f"⚠️ Error formateando métrica {metric_name}: {e}")
+        return metric_name
 
 
 # ============================================
 # INICIALIZACIÓN DE SESSION STATE
 # ============================================
 
-if "df" not in st.session_state:
-    st.session_state.df = None
-
-if "selected_metric" not in st.session_state:
-    st.session_state.selected_metric = "casos"
-
-if "date_filter" not in st.session_state:
-    st.session_state.date_filter = None
+def initialize_session_state(df):
+    """Inicializa el session state con valores por defecto si no existen."""
+    
+    # Inicializar dataframe (si existe, mantenerlo; sino None)
+    if "df" not in st.session_state:
+        st.session_state.df = df
+    
+    # Inicializar métrica seleccionada
+    if "selected_metric" not in st.session_state:
+        st.session_state.selected_metric = "casos"
+    
+    # Inicializar filtro temporal (si existe, mantenerlo; sino None)
+    if "date_filter" not in st.session_state:
+        st.session_state.date_filter = None
+    
+    return True
 
 
 # ============================================
@@ -135,57 +175,95 @@ if "date_filter" not in st.session_state:
 with st.sidebar:
     st.header("⚙️ Configuración del Panel", divider="primary")
     
-    # Selector de métrica
-    available_metrics = get_available_metrics(st.session_state.df) if st.session_state.df is not None else []
-    selected_metric = st.selectbox(
-        "📊 Métrica a analizar:",
-        available_metrics,
-        index=available_metrics.index(st.session_state.selected_metric) if st.session_state.selected_metric in available_metrics else 0,
-        help="Selecciona la métrica que deseas analizar (casos, muertes, hospitalizados u otras)"
-    )
-    st.session_state.selected_metric = selected_metric
+    # Selector de métrica (si hay datos cargados)
+    if st.session_state.df is not None:
+        available_metrics = get_available_metrics(st.session_state.df)
+        
+        if available_metrics:
+            selected_metric = st.selectbox(
+                "📊 Métrica a analizar:",
+                available_metrics,
+                index=0 if not st.session_state.selected_metric or st.session_state.selected_metric not in available_metrics else 
+                       available_metrics.index(st.session_state.selected_metric),
+                help="Selecciona la métrica que deseas analizar (casos, muertes, hospitalizados u otras)"
+            )
+            st.session_state.selected_metric = selected_metric
     
     # Filtros temporales
     st.subheader("📅 Período Temporal")
-    date_option = st.radio(
-        "Rango temporal:",
-        ["Completo", "-30 días", "-60 días", "-90 días"],
-        horizontal=True
-    )
     
-    if date_option == "Completo":
-        st.session_state.date_filter = None
+    if st.session_state.df is not None:
+        last_data_date = st.session_state.df['fecha'].max()
+        first_data_date = st.session_state.df['fecha'].min()
+        
+        date_option = st.radio(
+            "Rango temporal:",
+            ["Completo", "-30 días", "-60 días", "-90 días"],
+            horizontal=True
+        )
+        
+        if date_option == "Completo":
+            st.session_state.date_filter = None
+            st.info("✅ Se mostrarán todos los datos disponibles")
+        else:
+            days = {"-30 días": 30, "-60 días": 60, "-90 días": 90}
+            
+            # 🔴 CORRECCIÓN CRÍTICA: Usar la última fecha del dataset, NO hoy en día
+            end_date = last_data_date.date()  # Fecha final del dataset (ej: 2021-12-31)
+            start_date = last_data_date - pd.Timedelta(days=days[date_option])
+            
+            st.session_state.date_filter = (start_date, end_date)
+            
+            # Mostrar rango seleccionado
+            st.caption(
+                f"📌 Rango: {start_date.date().strftime('%d/%m/%Y')} hasta {end_date.strftime('%d/%m/%Y')}"
+            )
     else:
-        days = {"-30 días": 30, "-60 días": 60, "-90 días": 90}
-        start_date = datetime.datetime.now().date() - pd.Timedelta(days=days[date_option])
-        st.session_state.date_filter = (start_date, datetime.datetime.now().date())
+        st.warning("⚠️ Esperando datos para mostrar filtros temporales")
 
 
 # ============================================
 # CARGA DE DATOS (UNA SOLA VEZ)
 # ============================================
 
+df_loaded = None
+load_message = ""
+
 if st.session_state.df is None:
     try:
-        st.session_state.df, message = load_processed_data()
+        st.session_state.df, load_message = load_processed_data()
         
         if st.session_state.df is not None:
-            st.success(f"✅ {message}")
+            df_loaded = st.session_state.df
+            st.success(f"✅ {load_message}")
             
-            # Mostrar métricas clave en cards
+            # Calcular estadísticas básicas para mostrar en cards
+            total_records = len(df_loaded)
+            unique_states = df_loaded['estado'].nunique() if 'estado' in df_loaded.columns else 0
+            
+            # Fecha mínima y máxima
+            if 'fecha' in df_loaded.columns:
+                min_date = df_loaded['fecha'].min().strftime('%d/%m/%Y')
+                max_date = df_loaded['fecha'].max().strftime('%d/%m/%Y')
+                total_days = (df_loaded['fecha'].max() - df_loaded['fecha'].min()).days + 1
+            else:
+                min_date = "N/A"
+                max_date = "N/A"
+                total_days = 0
+            
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
-                total_records = st.metric("Registros Cargados", f"{len(st.session_state.df):,}", delta="OK")
+                st.metric("Registros Cargados", f"{total_records:,}", delta="OK")
             
             with col2:
-                unique_states = st.metric("Estados", st.session_state.df['estado'].nunique(), delta="Active")
+                st.metric("Estados", unique_states, delta="Active")
             
             with col3:
-                total_days = st.metric("Días Periodo", st.session_state.df['fecha'].nunique(), delta="Cobertura")
+                st.metric("Días Periodo", total_days, delta="Cobertura")
             
             with col4:
-                data_source = st.metric("Fuente", "data/processed/", delta="Directo")
+                st.metric("Rango Fecha", f"{min_date} - {max_date}", delta="Directo")
         else:
             st.error("❌ No se pudieron cargar los datos. Revisa la consola para detalles.")
             st.stop()
@@ -194,7 +272,8 @@ if st.session_state.df is None:
         st.error(f"❌ Error crítico al cargar datos:\n\n{str(e)[:200]}")
         st.stop()
 
-df = st.session_state.df
+# Actualizar session_state con dataframe cargado
+st.session_state.df = df_loaded
 
 
 # ============================================
@@ -203,18 +282,28 @@ df = st.session_state.df
 
 st.markdown('<h3 style="margin-top:2rem; color:#1f77b4;">📈 Métricas Clave del Período</h3>', unsafe_allow_html=True)
 
-# Aplicar filtros si existen
-if not st.session_state.date_filter:
-    filtered_df = df.copy()
+# Aplicar filtros temporales SI EXISTEN
+if st.session_state.date_filter:
+    start_date, end_date = st.session_state.date_filter
+    mask = (df_loaded['fecha'] >= start_date) & (df_loaded['fecha'] <= end_date)
+    filtered_df = df_loaded[mask]
 else:
-    mask = (df['fecha'] >= st.session_state.date_filter[0]) & \
-            (df['fecha'] <= st.session_state.date_filter[1])
-    filtered_df = df[mask]
+    filtered_df = df_loaded.copy()
 
-if not filtered_df.empty and 'casos' in filtered_df.columns:
+# Verificar que no esté vacío
+if filtered_df.empty:
+    st.error("⚠️ No hay datos para mostrar con los filtros seleccionados.")
+    st.stop()
+
+# Verificar columnas básicas
+has_casos = 'casos' in filtered_df.columns
+has_muertes = 'muertes' in filtered_df.columns if not has_casos else False
+has_hospitalizados = 'hospitalizados' in filtered_df.columns if not has_casos and not has_muertes else False
+
+if has_casos:
     total_casos = filtered_df['casos'].sum()
-    total_muertes = filtered_df['muertes'].sum() if 'muertes' in filtered_df.columns else 0
-    total_hospitalizados = filtered_df.get('hospitalizados', pd.Series([])).sum() if 'hospitalizados' in filtered_df.columns else 0
+    total_muertes = filtered_df.get('muertes').sum() if has_muertes else 0
+    total_hospitalizados = filtered_df.get('hospitalizados', pd.Series([])).sum() if has_hospitalizados else 0
     
     # Calcular tasas
     tasa_fatality = (total_muertes / total_casos * 100) if total_casos > 0 else 0
@@ -225,7 +314,7 @@ if not filtered_df.empty and 'casos' in filtered_df.columns:
         st.metric(
             "📋 Casos Totales", 
             f"{total_casos:,}", 
-            help="Suma total de casos confirmados en el periodo seleccionado"
+            help=f"Suma total de casos confirmados en el periodo ({start_date.date().strftime('%d/%m/%Y')} - {end_date.strftime('%d/%m/%Y')})"
         )
     
     with col2:
@@ -237,65 +326,70 @@ if not filtered_df.empty and 'casos' in filtered_df.columns:
         )
     
     with col3:
-        if 'hospitalizados' in filtered_df.columns and total_hospitalizados > 0:
+        if has_hospitalizados and total_hospitalizados > 0:
             st.metric(
                 "🏥 Pacientes Hospitalizados", 
-                f"{total_hospitalizados:,}", 
+                f"{total_hospitalizers:,}", 
                 help="Total de pacientes activos en hospitales"
             )
         else:
-            st.metric("🏥 N/A", "-", help="Variable no disponible")
-
-# ============================================
-# SECCIÓN 2: VISUALIZACIÓN INTERACTIVA PRINCIPAL
-# ============================================
-
-st.markdown('<h3 style="margin-top:2rem; color:#1f77b4;">🗺️ Visualización por Estados</h3>', unsafe_allow_html=True)
-
-col1, col2 = st.columns([1, 2])
-
-with col1:
-    # Selector de tipo de gráfico
-    plot_type = st.selectbox(
-        "Tipo de visualización:",
-        ["Bar Chart Horizontal", "Line Chart"],
-        index=0,
-        help="Barra horizontal para comparar estados o línea para ver tendencias temporales"
-    )
-
-# Preparar datos agrupados por estado
-region_aggregated = df.groupby('estado')[st.session_state.selected_metric].sum().sort_values(ascending=False)
-
-with col2:
-    if plot_type == "Bar Chart Horizontal":
-        fig_bar = px.bar(
-            region_aggregated.head(10).reset_index(),
-            y='estado',
-            x=st.session_state.selected_metric,
-            orientation='h',
-            title=f"Top 10 Estados por {st.session_state.selected_metric.title()}",
-            color=st.session_state.selected_metric,
-            color_continuous_scale="Viridis",
-            labels={st.session_state.selected_metric: st.session_state.selected_metric.title(), 'estado': 'Estado'}
-        )
-        fig_bar.update_layout(height=450)
-        
-    else:  # Line Chart
-        fig_line = px.line(
-            filtered_df.sort_values('fecha'),
-            x='fecha',
-            y=st.session_state.selected_metric,
-            title=f"Tendencia de {st.session_state.selected_metric.title()} a lo largo del tiempo",
-            markers=True,
-            labels={st.session_state.selected_metric: st.session_state.selected_metric.title(), 'fecha': 'Fecha'},
-            template="plotly_white"
-        )
-        fig_line.update_layout(height=400)
+            st.info("ℹ️ No hay datos de hospitalizaciones disponibles")
     
-    st.plotly_chart(fig_bar if plot_type == "Bar Chart Horizontal" else fig_line, use_container_width=True)
+    with col4:
+        media_casos_poc = (total_casos / filtered_df['poblacion_total'].sum()) if 'poblacion_total' in filtered_df.columns and filtered_df['poblacion_total'].sum() > 0 else 0
+        st.metric(
+            "👥 Casos por Hab./Medio", 
+            f"{media_casos_poc:.2f}",
+            help="Casos promedio por habitante"
+        )
 
 # ============================================
-# SECCIÓN 3: ANÁLISIS DETALLADO POR VARIABLES
+# SECCIÓN 2: MAPA DE CASOS POR ESTADO
+# ============================================
+
+st.markdown('<h3 style="margin-top:2rem; color:#1f77b4;">🗺️ Mapa de Casos por Estado</h3>', unsafe_allow_html=True)
+
+if has_casos and 'estado' in filtered_df.columns:
+    # Ordenar por casos y tomar top 15
+    state_cases = filtered_df.groupby('estado')['casos'].sum().sort_values(ascending=False).head(15)
+    
+    fig_state_map = px.bar(
+        state_cases.reset_index(),
+        x='estado',
+        y='casos',
+        orientation='h',
+        title=f"Top 15 Estados por Casos Totales ({start_date.date().strftime('%d/%m/%Y')} - {end_date.strftime('%d/%m/%Y')})",
+        color='casos',
+        color_continuous_scale="Blues"
+    )
+    fig_state_map.update_layout(height=400)
+    
+    st.plotly_chart(fig_state_map, use_container_width=True)
+
+# ============================================
+# SECCIÓN 3: TENDENCIAS TEMPORALES
+# ============================================
+
+st.markdown('<h3 style="margin-top:2rem; color:#1f77b4;">📅 Tendencias Temporales</h3>', unsafe_allow_html=True)
+
+if has_casos and 'fecha' in filtered_df.columns:
+    # Ordenar por fecha y agregar acumulados semanales
+    df_temporal = filtered_df.sort_values('fecha').groupby(['fecha', 'estado'], as_index=False)['casos'].sum()
+    
+    fig_trends = px.line(
+        df_temporal, 
+        x='fecha', 
+        y='casos', 
+        color='estado',
+        title=f"Evolución de Casos Temporales ({start_date.date().strftime('%d/%m/%Y')} - {end_date.strftime('%d/%m/%Y')})",
+        markers=True
+    )
+    fig_trends.update_layout(height=400)
+    
+    st.plotly_chart(fig_trends, use_container_width=True)
+
+# ============================================
+# SECCIÓN 4: ANÁLISIS POR VARIABLES
 # ============================================
 
 st.markdown('<h3 style="margin-top:2rem; color:#1f77b4;">🔍 Análisis Detallado de Variables</h3>', unsafe_allow_html=True)
@@ -304,17 +398,17 @@ col1, col2 = st.columns(2)
 
 with col1:
     # Tabla resumen estadístico para variables numéricas
-    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    numeric_cols = filtered_df.select_dtypes(include=[np.number]).columns.tolist()
     
     if numeric_cols:
         with st.expander("📊 Ver resumen estadístico completo"):
             summary_df = pd.DataFrame({
                 "Variable": numeric_cols,
-                "Media": [df[col].mean() for col in numeric_cols],
-                "Mediana": [df[col].median() for col in numeric_cols],
-                "Mínimo": [df[col].min() for col in numeric_cols],
-                "Máximo": [df[col].max() for col in numeric_cols],
-                "Desviación Estándar": [df[col].std() for col in numeric_cols]
+                "Media": [filtered_df[col].mean() for col in numeric_cols],
+                "Mediana": [filtered_df[col].median() for col in numeric_cols],
+                "Mínimo": [filtered_df[col].min() for col in numeric_cols],
+                "Máximo": [filtered_df[col].max() for col in numeric_cols],
+                "Desviación Estándar": [filtered_df[col].std() for col in numeric_cols]
             })
             
             # Filtrar NaN e infinito y redondear
@@ -324,45 +418,49 @@ with col1:
 
 with col2:
     # Mostrar distribución de valores por estado (para variable seleccionada)
-    if len(df.groupby('estado')[st.session_state.selected_metric].count()) > 0:
+    if filtered_df is not None and st.session_state.selected_metric and st.session_state.selected_metric in filtered_df.columns:
         with st.expander("📈 Distribución por Estado"):
-            state_counts = df.groupby('estado')[st.session_state.selected_metric].sum().sort_values(ascending=False).head(15)
+            metric_col = st.session_state.selected_metric
             
-            fig_state_dist = px.bar(
-                state_counts.reset_index(),
-                x='estado',
-                y=st.session_state.selected_metric,
-                title=f"Distribución por Estado ({st.session_state.selected_metric.title()})",
-                color=st.session_state.selected_metric,
-                color_continuous_scale="Blues"
-            )
-            fig_state_dist.update_layout(height=350)
-            
-            st.plotly_chart(fig_state_dist, use_container_width=True)
+            # Verificar que no sea una métrica numérica (casos, muertes, hospitalizados)
+            if metric_col not in ['casos', 'muertes', 'hospitalizados']:
+                state_counts = filtered_df.groupby('estado')[metric_col].sum().sort_values(ascending=False).head(15)
+                
+                fig_state_dist = px.bar(
+                    state_counts.reset_index(),
+                    x='estado',
+                    y=metric_col,
+                    title=f"Distribución por Estado ({format_metric_name_for_display(metric_col.title())})",
+                    color=metric_col,
+                    color_continuous_scale="Blues"
+                )
+                fig_state_dist.update_layout(height=350)
+                
+                st.plotly_chart(fig_state_dist, use_container_width=True)
 
 # ============================================
-# SECCIÓN 4: DESCARGA DE DATOS
+# SECCIÓN 5: DESCARGA DE DATOS
 # ============================================
 
 st.markdown('<h3 style="margin-top:2rem; color:#1f77b4;">💾 Exportar Datos</h3>', unsafe_allow_html=True)
 
-csv_buffer = df.to_csv(index=False).encode('utf-8')
+csv_buffer = filtered_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8')
 
 st.download_button(
-    label="📥 Descargar todos los datos (CSV)",
+    label="📥 Descargar datos filtrados (CSV)",
     data=csv_buffer,
-    file_name=f"covid_eda_data_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+    file_name=f"covid_eda_{filtered_df['estado'].nunique()}_estados_{start_date.date().strftime('%d%m%Y')}-{end_date.strftime('%d%m%Y')}.csv" if st.session_state.date_filter else f"covid_eda_{filtered_df['estado'].nunique()}_estados_completo.csv",
     mime="text/csv",
     help="Descarga el conjunto completo de datos procesados para análisis externo"
 )
 
 # ============================================
-# SECCIÓN 5: NOTAS METODOLÓGICAS Y FUENTES
+# SECCIÓN 6: NOTAS METODOLÓGICAS Y FUENTES
 # ============================================
 
 st.markdown('<h3 style="margin-top:2rem; color:#1f77b4;">📝 Notas Metodológicas</h3>', unsafe_allow_html=True)
 
-st.markdown("""
+st.markdown(f"""
 ### 📋 Descripción del Análisis
 
 Este dashboard interactivo proporciona análisis exploratorio de datos sobre COVID-19 con las siguientes características:
@@ -390,12 +488,15 @@ Este dashboard interactivo proporciona análisis exploratorio de datos sobre COV
 - Todos los archivos CSV han sido validados antes del análisis
 - Filtros por estado y periodo temporal disponibles en sidebar
 - Exportación de datos en formato CSV para análisis externo con Python, R o Excel
-""")
+
+**🔴 IMPORTANTE - Filtrado Temporal:**
+Los filtros temporales aplican rangos **relativos a la última fecha disponible del dataset**, no a "hoy". Esto evita mostrar NaN al analizar datos históricos.
+""".format())
 
 # Footer con información del proyecto
 st.markdown("---")
-st.caption("""
+st.caption(f"""
 🦠 **COVID-19 EDA Dashboard** | Proyecto IA P1-BCN Maestría 2º | Análisis Exploratorio de Datos
 
-*Generado el {datetime.datetime.now().strftime('%Y-%m-%d')} | Versión 1.0 para despliegue en Streamlit Cloud*
-""".format())
+*Generado el {datetime.datetime.now().strftime('%Y-%m-%d')} | Versión 1.1 - Corrección de filtros temporales aplicada*
+""")
