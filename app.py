@@ -1,7 +1,6 @@
 import pandas as pd
 from pathlib import Path
 import streamlit as st
-import plotly.graph_objects as go
 
 # Configuración
 st.set_page_config(
@@ -11,10 +10,9 @@ st.set_page_config(
 )
 
 # ============================================
-# CARGA DE DATOS
+# CARGA DE DATOS - SIN CACHE PARA FORZAR RECARGA
 # ============================================
 
-@st.cache_data(ttl=None)
 def load_data():
     """Carga los datos procesados."""
     script_dir = Path(__file__).parent
@@ -24,27 +22,17 @@ def load_data():
     return df
 
 # ============================================
-# CARGA E INICIALIZACIÓN
+# CARGA Y MENSAJE DE INICIO
 # ============================================
 
 df = load_data()
 
-# Inicializar session state una sola vez
-if "initialized" not in st.session_state:
-    st.success(f"✅ Cargados {len(df)} registros de {df['estado'].nunique()} estados")
+with st.expander("📦 Información de carga"):
+    st.success(f"✅ Cargados {len(df):,} registros de {df['estado'].nunique()} estados")
     
-    # Estadísticas rápidas
-    cols = st.columns(4)
-    with cols[0]:
-        st.metric("Registros", len(df))
-    with cols[1]:
-        st.metric("Estados", df['estado'].nunique())
-    with cols[2]:
-        first_date = df['fecha'].min().strftime('%d/%m/%Y')
-        last_date = df['fecha'].max().strftime('%d/%m/%Y')
-        st.metric("Rango Fecha", f"{first_date} - {last_date}")
-    
-    st.session_state.initialized = True
+    first_date = df['fecha'].min().strftime('%d/%m/%Y')
+    last_date = df['fecha'].max().strftime('%d/%m/%Y')
+    st.info(f"📅 Rango de datos: {first_date} a {last_date}")
 
 # ============================================
 # SIDEBAR - FILTROS
@@ -53,50 +41,40 @@ if "initialized" not in st.session_state:
 with st.sidebar:
     st.header("⚙️ Configuración", divider="primary")
     
-    # Columnas disponibles (agregamos columna derivada para casos no acum)
-    metric_columns = [
-        'casos_acum',
-        'muertes_acum', 
-        'hospitalizados_actuales',
-        'tests_acum'
-    ]
-    
-    # Verificar columnas adicionales del dataframe
-    for col in df.columns:
-        if col not in metric_columns and 'acum' not in col.lower() and 'poblacion' in col.lower():
-            metric_columns.append(col)
+    # Columnas disponibles
+    metric_columns = ['casos_acum', 'muertes_acum', 'hospitalizados_actuales'] + \
+                     [col for col in df.columns if col not in ['casos_acum', 'muertes_acum', 'hospitalizados_actuales']]
     
     selected_metric = st.selectbox(
         "📊 Métrica a analizar:",
         sorted(metric_columns, key=str.lower),
         index=0,  # Por defecto casos_acum
-        help="Selecciona la métrica que deseas visualizar"
     )
     
     st.session_state.selected_metric = selected_metric
     
     st.divider()
     
-    # Filtros temporales - CRÍTICO: Usar fecha max del dataset
-    last_date = df['fecha'].max()
-    first_date = df['fecha'].min()
+    # Filtros temporales
+    last_date_ts = df['fecha'].max()
     
     date_option = st.radio(
         "📅 Período temporal:",
         ["Completo", "-30 días", "-60 días", "-90 días"],
         horizontal=True,
-        key="temporal_filter"  # Clave única para recalcular siempre
+        key="date_filter"  # Clave única
     )
     
     if date_option == "Completo":
         st.session_state.date_filter = None
+        st.info("✅ Mostrar todos los datos")
     else:
         days_map = {"-30 días": 30, "-60 días": 60, "-90 días": 90}
         days = days_map[date_option]
         
-        # 🔴 CORRECCIÓN: Usar última fecha del dataset como referencia
-        end_date = last_date.date()
-        start_date = (last_date - pd.Timedelta(days=days)).date()
+        # Usar última fecha del dataset como referencia (NO hoy!)
+        end_date = last_date_ts.date()
+        start_date = (last_date_ts - pd.Timedelta(days=days)).date()
         
         st.session_state.date_filter = (start_date, end_date)
         st.caption(f"📌 {start_date} a {end_date}")
@@ -111,23 +89,24 @@ filtered_df = df.copy()
 if st.session_state.date_filter:
     start_date, end_date = st.session_state.date_filter
     mask = (df['fecha'] >= pd.Timestamp(start_date)) & (df['fecha'] <= pd.Timestamp(end_date))
+    filtered_df = df.loc[mask].copy()
     
-    # Contar cuántos estados tienen datos en este rango
-    states_with_data = df.loc[mask, 'estado'].nunique()
-    total_states = df['estado'].nunique()
-    
-    if metric_col in df.columns:
-        filtered_df = df.loc[mask].copy()
+    # Contar estados con datos
+    if metric_col in filtered_df.columns:
+        states_with_data = filtered_df['estado'].nunique()
+        total_states = df['estado'].nunique()
         
-        # Mostrar advertencia si hay pocos estados con datos
-        if states_with_data < total_states * 0.3 and 'acum' in metric_col.lower():
-            st.warning(f"⚠️ Solo {states_with_data}/{total_states} estados tienen datos en este periodo")
+        if date_option != "Completo" and states_with_data < 50 and 'acum' in metric_col.lower():
+            st.warning(
+                f"⚠️ Filtro temporal: Solo {states_with_data} de {total_states} estados tienen datos\n"
+                f"En periodos cortos, los datos acumulativos solo están disponibles para algunos estados."
+            )
 
 # ============================================
-# SECCIÓN 1: MÉTRICAS CLAVE (VISUALIZACIÓN INTERACTIVA)
+# SECCIÓN 1: TARJETAS DE MÉTRICAS (SIMPLES Y ROBUSTAS)
 # ============================================
 
-st.markdown('<h3 style="margin-top:2rem; color:#1f77b4;">📈 Métricas Clave</h3>', unsafe_allow_html=True)
+st.header("📊 Resumen del Período", divider="blue")
 
 if not filtered_df.empty and metric_col in filtered_df.columns:
     total = float(filtered_df[metric_col].sum())
@@ -144,218 +123,173 @@ if not filtered_df.empty and metric_col in filtered_df.columns:
     if 'hospitalizados_actuales' in filtered_df.columns:
         hosp_total = float(filtered_df['hospitalizados_actuales'].sum())
     
-    # Columnas para métricas adicionales
-    additional_metrics = {
-        col: float(filtered_df[col].sum()) 
-        for col in ['tests_acum', 'positividad_7d'] 
-        if col in filtered_df.columns and not pd.isna(filtered_df[col].mean())
-    }
-    
-    # Mostrar en cards interactivas
+    # Columnas para cards
     cols = st.columns(4)
     
+    # Card 1: Métrica principal
     with cols[0]:
-        card_label = metric_col.replace('_', ' ').title()
-        display_total = f"{int(round(total)):,}" if not pd.isna(total) else "N/A"
+        display_val = f"{int(round(total)):,}" if not pd.isna(total) else "N/A"
+        delta_text = ""
         
-        if fatality_rate is not None and death_total is not None:
+        if fatality_rate is not None and death_total is not None and not pd.isna(death_total):
             st.metric(
-                label=card_label,
-                label=f"{display_total}",
+                label=f"📋 {metric_col.replace('_', ' ').title()}",
+                value=display_val,
                 delta=f"{fatality_rate:.2f}%",
-                help=f"Métrica seleccionada\nTotal: {display_total}\nLetalidad: {fatality_rate:.2f}%"
+                delta_color="normal"
             )
-        elif pd.isna(total):
-            st.metric(label=card_label, label="N/A", delta=None)
         else:
-            st.metric(label=card_label, label=f"{int(round(total)):,}", delta=None)
+            st.metric(label=f"📋 {metric_col.replace('_', ' ').title()}", value=display_val)
     
+    # Card 2: Muertes (si existe)
     with cols[1]:
         if death_total is not None and not pd.isna(death_total):
             st.metric(
-                label="Muertes Totales",
-                label=f"{int(round(death_total)):,}",
-                delta=f"{fatality_rate:.2f}%",
-                help="Total acumulado de muertes"
+                label="⚰️ Muertes",
+                value=f"{int(round(death_total)):,}",
+                delta=f"{fatality_rate:.2f}%"
             )
         else:
-            st.info("ℹ️ Sin datos de muertes")
+            st.info("ℹ️ No hay datos de muertes")
     
+    # Card 3: Hospitalizados (si existe)
     with cols[2]:
         if hosp_total is not None and not pd.isna(hosp_total):
-            st.metric(label="Hospitalizados", label=f"{int(round(hosp_total)):,}")
-        elif 'hospitalizados_actuales' not in filtered_df.columns:
-            st.info("ℹ️ Sin datos de hospitalizaciones")
+            st.metric(label="🏥 Hospitalizados", value=f"{int(round(hosp_total)):,}")
+        else:
+            st.info("ℹ️ No hay datos de hospitalizaciones")
     
+    # Card 4: Población (si existe)
     with cols[3]:
-        # Mostrar métrica adicional
-        metric_labels = {
-            'tests_acum': ('Pruebas Totales', 'Tests Totales'),
-            'positividad_7d': ('Positividad 7d', 'Tasa Positividad')
-        }
-        
-        display_metric, display_label = metric_labels.get(metric_col, (None, metric_col))
-        
-        if display_metric is not None and not pd.isna(display_metric):
-            st.metric(label=display_label, label=f"{int(round(display_metric)):,}")
-        elif display_metric is None:
-            # Mostrar última métrica disponible
-            for col_name in ['tests_acum']:
-                if col_name in additional_metrics and col_name != metric_col:
-                    st.metric(label=additional_metrics[col_name].replace('_', ' ').title(), label=f"{int(round(additional_metrics[col_name])):,}")
-                    break
+        if 'poblacion' in filtered_df.columns and filtered_df['poblacion'].sum() > 0:
+            pop_total = float(filtered_df['poblacion'].sum())
+            per_capita = total / pop_total
+            st.metric(
+                label="👥 Casos por Habitante",
+                value=f"{per_capita:.2f}"
+            )
+        else:
+            st.info("ℹ️ No hay datos de población")
 
 
 # ============================================
-# SECCIÓN 2: VISUALIZACIÓN POR ESTADOS (TOP 15)
+# SECCIÓN 2: DATOS POR ESTADO (TABLA INTERACTIVA)
 # ============================================
 
-st.markdown('<h3 style="margin-top:2rem; color:#1f77b4;">🗺️ Top Estados</h3>', unsafe_allow_html=True)
+st.header("🗺️ Datos por Estado", divider="blue")
 
-if metric_col in filtered_df.columns and 'estado' in filtered_df.columns:
-    state_data = filtered_df.groupby('estado')[metric_col].sum().sort_values(ascending=False).head(15)
+if not filtered_df.empty and metric_col in filtered_df.columns:
     
-    # Verificar que hay datos
-    if len(state_data) > 0 and not all(pd.isna(state_data.iloc[0, -1]) for _ in range(len(state_data))):
-        fig = go.Figure(go.Bar(
-            x=state_data.index.astype(str),
-            y=state_data.values,
-            orientation='h',
-            marker_color='blue'
-        ))
-        
-        fig.update_layout(
-            title=f"Top 15 Estados por {metric_col.replace('_', ' ').title()}",
-            height=400,
-            yaxis=dict(title=metric_col.replace('_', ''))
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
+    # Agrupar por estado y sumar métricas principales
+    state_summary = filtered_df.groupby('estado').agg({
+        metric_col: 'sum'
+    })
+    
+    # Agregar otras métricas si existen
+    for col in ['muertes_acum', 'hospitalizados_actuales', 'tests_acum']:
+        if col in filtered_df.columns:
+            state_summary[col] = filtered_df.groupby('estado')[col].sum()
+    
+    # Convertir índice a columna para mejor display
+    state_summary.index.name = None
+    
+    # Ordenar por métrica principal
+    state_summary = state_summary.sort_values(metric_col, ascending=False)
+    
+    # Tomar top 30 estados
+    top_states = state_summary.head(30).copy()
+    
+    st.dataframe(
+        top_states.style.format('{:.0f}').applymap(
+            lambda v: '<font color="red">' + str(v) + '</font>' if pd.isna(v) or v == 0 else str(v),
+            subset=[]
+        ),
+        use_container_width=True,
+        height=500
+    )
 
 
 # ============================================
-# SECCIÓN 3: DATASET INTERACTIVO COMPARATIVO
+# SECCIÓN 3: COMPARACIÓN DE MÚLTIPLES MÉTRICAS
 # ============================================
 
-st.markdown('<h3 style="margin-top:2rem; color:#1f77b4;">🔍 Comparar Métricas</h3>', unsafe_allow_html=True)
+st.header("🔍 Comparación de Métricas", divider="blue")
 
-# Agregar columna con suma de todas las métricas principales
-if metric_col in filtered_df.columns:
+if not filtered_df.empty and metric_col in filtered_df.columns:
+    
+    # Verificar qué métricas principales existen
     base_columns = ['casos_acum', 'muertes_acum', 'hospitalizados_actuales']
+    available_metrics = [col for col in base_columns if col in filtered_df.columns]
     
-    # Crear columna combinada si existen todas las métricas principales
-    combined_cols = [col for col in base_columns if col in filtered_df.columns]
+    if len(available_metrics) > 1:
+        # Crear tabla comparativa
+        compare_df = filtered_df.groupby('estado')[available_metrics].sum().reset_index()
+        
+        # Tomar top 20 estados
+        compare_df = compare_df.sort_values(metric_col, ascending=False).head(20)
+        
+        # Renombrar columnas para display
+        col_names = {}
+        for col in available_metrics:
+            col_names[col] = col.replace('_', ' ').title()
+        
+        compare_df.rename(columns=col_names, inplace=True)
+        
+        st.dataframe(
+            compare_df.style.format('{:.0f}').applymap(
+                lambda v: '' if pd.isna(v) else str(v),
+                subset=[]
+            ),
+            use_container_width=True,
+            height=400
+        )
+
+
+# ============================================
+# SECCIÓN 4: ESTADÍSTICAS RESUMEN
+# ============================================
+
+st.header("📊 Estadísticas", divider="blue")
+
+if not filtered_df.empty:
+    numeric_cols = [col for col in filtered_df.select_dtypes(include=['number']).columns]
     
-    if len(combined_cols) > 1:
-        combined_name = '_COMBINADO'
-        filtered_df[combined_name] = filtered_df[combined_cols].sum(axis=1)
-        
-        # Mostrar tabla interactiva con todas las métricas principales
-        st.markdown("**📊 Datos por Estado (Top 20)**")
-        
-        top_states = filtered_df.groupby('estado')[metric_col].sum().nlargest(20, default=None).reset_index()
-        
-        if not top_states.empty:
-            # Preparar datos para tabla
-            display_df = top_states.copy()
+    if numeric_cols:
+        with st.expander("Ver resumen estadístico"):
+            summary = pd.DataFrame({
+                "Métrica": numeric_cols,
+                "Media": [filtered_df[col].mean() for col in numeric_cols],
+                "Total": [filtered_df[col].sum() for col in numeric_cols]
+            })
             
-            for col in ['muertes_acum', 'hospitalizados_actuales', 'tests_acum']:
-                if col in filtered_df.columns and col not in ['casos_acum']:
-                    display_df[col] = filtered_df.loc[display_df['estado'], col].sum()
+            # Redondear valores
+            summary["Media"] = summary["Media"].round(2)
+            summary["Total"] = summary["Total"].round(0).apply(lambda x: '' if pd.isna(x) else f"{int(round(x)):,}")
             
-            st.dataframe(display_df.head(20), use_container_width=True)
+            st.dataframe(summary, use_container_width=True)
 
 
 # ============================================
-# SECCIÓN 4: TENDENCIAS TEMPORALES
+# SECCIÓN 5: INFO DE FILTROS
 # ============================================
 
-st.markdown('<h3 style="margin-top:2rem; color:#1f77b4;">📅 Evolución Temporal</h3>', unsafe_allow_html=True)
+st.header("📅 Filtros Activos", divider="blue")
 
-if metric_col in filtered_df.columns and 'fecha' in filtered_df.columns:
-    temporal_data = filtered_df.sort_values('fecha').groupby(['fecha', 'estado'], as_index=False)[metric_col].sum()
-    
-    fig = go.Scatter(
-        x=temporal_data['fecha'],
-        y=temporal_data[metric_col],
-        mode='lines+markers',
-        name=metric_col.replace('_', '').title(),
-        line=dict(width=2)
-    )
-    
-    # Agregar líneas para cada estado en el top 5
-    top_states = temporal_data.nlargest(5, metric_col)['estado'].tolist()
-    
-    for estado in top_states:
-        estado_data = temporal_data[temporal_data['estado'] == estado]
-        fig.add_trace(go.Scatter(
-            x=estado_data['fecha'],
-            y=estado_data[metric_col],
-            mode='lines',
-            name=f'{estado} ({estado_data[metric_col].sum():.0f})'[:20],
-            line=dict(width=1, dash='dash')
-        ))
-    
-    fig.update_layout(
-        title=f"Evolución de {metric_col.replace('_', ' ').title()} por Estado",
-        xaxis_title="Fecha",
-        yaxis_title=metric_col.replace('_', ''),
-        height=400
-    )
-    
-    st.plotly_chart(fig, use_container_width=True)
-
-
-# ============================================
-# SECCIÓN 5: ESTADÍSTICAS RESUMEN
-# ============================================
-
-st.markdown('<h3 style="margin-top:2rem; color:#1f77b4;">📊 Estadísticas</h3>', unsafe_allow_html=True)
-
-numeric_cols = [col for col in filtered_df.select_dtypes(include=['number']).columns if 'acum' in col.lower() or 'poblacion' in col.lower()]
-
-if numeric_cols:
-    with st.expander("Ver resumen estadístico"):
-        summary = pd.DataFrame({
-            "Métrica": numeric_cols,
-            "Media": [filtered_df[col].mean() for col in numeric_cols],
-            "Total": [filtered_df[col].sum() for col in numeric_cols]
-        })
-        
-        # Redondear valores muy pequeños
-        summary = summary.replace([0.0, float('nan')], None)
-        summary["Media"] = summary["Media"].round(4)
-        summary["Total"] = summary["Total"].round(2)
-        
-        st.dataframe(summary, use_container_width=True)
-
-
-# ============================================
-# SECCIÓN 6: DESCARGAR DATOS
-# ============================================
-
-st.markdown('<h3 style="margin-top:2rem; color:#1f77b4;">💾 Exportar Datos</h3>', unsafe_allow_html=True)
-
-csv_data = filtered_df.to_csv(index=False, encoding='utf-8-sig')
-
-st.download_button(
-    label="📥 Descargar CSV",
-    data=csv_data,
-    file_name=f"covid_{metric_col.replace('_', '_')}_{int(filtered_df['estado'].nunique())}_estados.csv" if not filtered_df.empty else "covid_datos.csv",
-    mime="text/csv"
-)
-
+if st.session_state.date_filter:
+    start_date, end_date = st.session_state.date_filter
+    st.info(f"✅ Mostrando datos de **{start_date}** a **{end_date}** (relativo al último dato disponible del dataset)")
+else:
+    first_date = df['fecha'].min()
+    last_date = df['fecha'].max()
+    st.info(f"✅ Mostrando TODOS los datos desde **{first_date.strftime('%d/%m/%Y')}** hasta **{last_date.strftime('%d/%m/%Y')}**")
 
 # ============================================
 # FOOTER
 # ============================================
 
 st.markdown("---")
-start_date_str = start_date if st.session_state.date_filter else first_date.strftime('%d/%m/%Y')
-end_date_str = end_date if st.session_state.date_filter else last_date.strftime('%d/%m/%Y')
-
 st.caption(
-    f"🦠 COVID-19 EDA Dashboard | IA P1-BCN Maestría 2º\n"
-    f"*Filtro temporal: {start_date_str} - {end_date_str}*\n"
-    f*Métrica seleccionada: {metric_col.replace('_', ' ').title()}*"
+    f"🦠 COVID-19 EDA Dashboard | IA P1-BCN Maestría 2º\n\n"
+    f"*Métrica: {metric_col.replace('_', ' ').title()}*\n"
+    f*"Registros cargados: {len(df):,} | Estados: {df['estado'].nunique()}*"
 )
