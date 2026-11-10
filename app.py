@@ -48,8 +48,11 @@ if "initialized" not in st.session_state:
 with st.sidebar:
     st.header("Configuracion")
     
-    metric_columns = ['casos_acum', 'muertes_acum', 'hospitalizados_actuales', 'tests_acum'] + \
-                     [col for col in df.columns if col not in metric_columns and 'acum' not in col.lower()]
+    # Definir columnas disponibles para el selector de métricas
+    base_metrics = ['casos_acum', 'muertes_acum', 'hospitalizados_actuales', 'tests_acum']
+    other_metrics = [col for col in df.columns 
+                     if col not in base_metrics and 'acum' not in col.lower()]
+    metric_columns = base_metrics + other_metrics
     
     selected_metric = st.selectbox(
         "Métrica a analizar:",
