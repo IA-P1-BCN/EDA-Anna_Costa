@@ -304,7 +304,7 @@ else:
 
 st.markdown("---")
 st.caption(
-    "COVID-19 EDA Dashboard | IA P1-BCN Maestría 2º\n\n"
+    "COVID-19 EDA Dashboard by costanna\n\n"
     f"Métrica seleccionada: {metric_col.replace('_', ' ').title()}\n\n"
     "Filtro temporal aplicado"
 )
