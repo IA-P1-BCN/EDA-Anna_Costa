@@ -168,17 +168,15 @@ if not filtered_df.empty and metric_col in filtered_df.columns:
     available_metrics = [col for col in base_columns if col in filtered_df.columns]
     
     if len(available_metrics) > 1:
-        # Crear dataframe de comparación con nombres originales
-        metric_col_orig = metric_col  # Guardar nombre original para ordenar
-        compare_df = filtered_df.groupby('estado')[available_metrics].sum().reset_index()
-        
-        # Ordenar por la métrica original ANTES de renombrar
-        compare_df = compare_df.sort_values(metric_col_orig, ascending=False).head(20)
-        
-        col_names = {col: col.replace('_', ' ').title() for col in available_metrics}
-        compare_df.rename(columns=col_names, inplace=True)
-        
-        st.dataframe(compare_df.round(0).head(20), use_container_width=True)
+        metric_sort_column = metric_col
+    compare_data = filtered_df.groupby('estado')[available_metrics].sum().reset_index()
+    
+    # Ordenar por métrica original y limitar a top 20
+    if metric_sort_column in compare_data.columns:
+        compare_df = compare_data.sort_values(metric_sort_column, ascending=False).head(20).rename(
+            columns={col: col.replace('_', ' ').title() for col in available_metrics}
+        )
+        st.dataframe(compare_df.round(0), use_container_width=True)
 
 # ============================================
 # FOOTER
