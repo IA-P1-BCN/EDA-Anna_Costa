@@ -2,10 +2,10 @@ import pandas as pd
 from pathlib import Path
 import streamlit as st
 
+# Configuración
 st.set_page_config(
     page_title="COVID-19 EDA Dashboard",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
 # ============================================
@@ -23,7 +23,7 @@ def load_data():
 df = load_data()
 
 # ============================================
-# INICIALIZACIÓN
+# INICIALIZACIÓN DE SESSION STATE
 # ============================================
 
 if "initialized" not in st.session_state:
@@ -35,23 +35,25 @@ if "initialized" not in st.session_state:
     with cols[1]:
         st.metric("Estados", df['estado'].nunique())
     with cols[2]:
-        st.metric("Días", (df['fecha'].max() - df['fecha'].min()).days + 1)
+        total_days = (df['fecha'].max() - df['fecha'].min()).days + 1
+        st.metric("Días", total_days)
     with cols[3]:
-        st.metric("Rango", f"{df['fecha'].min().strftime('%d/%m/%Y')} - {df['fecha'].max().strftime('%d/%m/%Y')}")
+        first_date = df['fecha'].min().strftime('%d/%m/%Y')
+        last_date = df['fecha'].max().strftime('%d/%m/%Y')
+        st.metric("Rango", f"{first_date} - {last_date}")
     
     st.session_state.initialized = True
 
 # ============================================
-# SIDEBAR - FILTROS
+# SIDEBAR - CONFIGURACIÓN
 # ============================================
 
 with st.sidebar:
-    st.header("Configuracion")
+    st.header("Configuración")
     
     # Definir columnas disponibles para el selector de métricas
     base_metrics = ['casos_acum', 'muertes_acum', 'hospitalizados_actuales', 'tests_acum']
-    other_metrics = [col for col in df.columns 
-                     if col not in base_metrics and 'acum' not in col.lower()]
+    other_metrics = [col for col in df.columns if col not in base_metrics and 'acum' not in col.lower()]
     metric_columns = base_metrics + other_metrics
     
     selected_metric = st.selectbox(
@@ -71,14 +73,13 @@ with st.sidebar:
     date_option = st.radio(
         "Periodo temporal:",
         ["Completo", "-30 días", "-60 días", "-90 días"],
-        horizontal=True,
-        key="date_filter"
+        horizontal=True
     )
     
     # Setear filtros según selección del usuario
     if date_option == "Completo":
         st.session_state.date_filter = None
-        st.info("✅ Mostrar todos los datos")
+        st.info("Mostrar todos los datos")
     else:
         days_map = {"-30 días": 30, "-60 días": 60, "-90 días": 90}
         days = days_map[date_option]
