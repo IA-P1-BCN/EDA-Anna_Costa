@@ -46,7 +46,7 @@ if "initialized" not in st.session_state:
 # ============================================
 
 with st.sidebar:
-    st.header("Configuracion", divider="primary")
+    st.header("Configuracion")
     
     metric_columns = ['casos_acum', 'muertes_acum', 'hospitalizados_actuales', 'tests_acum'] + \
                      [col for col in df.columns if col not in metric_columns and 'acum' not in col.lower()]
@@ -96,7 +96,7 @@ if st.session_state.date_filter:
 # SECCIÓN 1: TARJETAS DE MÉTRICAS
 # ============================================
 
-st.header("Resumen del Periodo", divider="blue")
+st.header("Resumen del Periodo")
 
 if not filtered_df.empty and metric_col in filtered_df.columns:
     total = float(filtered_df[metric_col].sum())
@@ -135,7 +135,7 @@ if not filtered_df.empty and metric_col in filtered_df.columns:
 # SECCIÓN 2: TABLA POR ESTADO
 # ============================================
 
-st.header("Datos por Estado", divider="blue")
+st.header("Datos por Estado")
 
 if not filtered_df.empty and metric_col in filtered_df.columns:
     state_summary = filtered_df.groupby('estado').agg({metric_col: 'sum'})
@@ -153,7 +153,7 @@ if not filtered_df.empty and metric_col in filtered_df.columns:
 # SECCIÓN 3: COMPARACIÓN DE MÚLTIPLES MÉTRICAS
 # ============================================
 
-st.header("Comparación de Métricas", divider="blue")
+st.header("Comparación de Métricas")
 
 if not filtered_df.empty and metric_col in filtered_df.columns:
     base_columns = ['casos_acum', 'muertes_acum', 'hospitalizados_actuales']
