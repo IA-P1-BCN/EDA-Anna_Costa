@@ -1,111 +1,149 @@
-"""
-COVID-19 Dashboard - Análisis Exploratorio de Datos
-Aplicación Streamlit para visualización interactiva de datos epidemiológicos.
-Carga datos desde data/processed/ directamente en la aplicación.
-
-Fuentes de datos:
-- The COVID Tracking Project (casos, muertes, hospitalizados)
-- US Census Bureau (población por estado)
-
-Para ejecutar localmente:
-    streamlit run app.py
-
-Para desplegar en Streamlit Cloud:
-    1. Sube este repositorio a GitHub
-    2. Conecta en https://streamlit.io/cloud
-"""
-
-import streamlit as st
+import os
+import sys
+import json
+from pathlib import Path
 import pandas as pd
 import numpy as np
 import plotly.express as px
-from datetime import datetime
-import os
+import datetime
+import streamlit as st
 
-# ============================================
-# CONFIGURACIÓN DE LA PÁGINA
-# ============================================
+# Configuración de página
+page_icon = ":hospital:"
+page_title = "COVID-19 EDA Dashboard"
 
 st.set_page_config(
-    page_title="COVID-19 Dashboard",
+    page_title=page_title,
+    page_icon=page_icon,
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Estilos personalizados
-st.markdown("""
-<style>
-    .main-title {font-size: 2.5rem; font-weight: bold; color: #1f77b4;}
-    .subtitle {font-size: 1.2rem; color: #666; margin-top: 0.5rem;}
-    .metric-card {background-color: #f8f9fa; padding: 1rem; border-radius: 0.5rem; text-align: center;}
-</style>
-""", unsafe_allow_html=True)
-
 # ============================================
-# FUNCIONES DE CARGA DE DATOS
+# FUNCIONES AUXILIARES
 # ============================================
 
-@st.cache_data(ttl=3600)
 def load_processed_data():
-    """Cargar datos procesados con prioridad a covid_estados_final.csv"""
+    """Carga los datos procesados desde el repositorio."""
     
-    file_order = [
-        "data/processed/covid_estados_final.csv",
-        "data/processed/covid_estados_limpio.csv",
-        "data/processed/covid_estados_variables.csv"
-    ]
+    script_dir = Path(__file__).parent if __file__ else Path.cwd()
     
-    for file_path in file_order:
-        if os.path.exists(file_path):
-            try:
-                df = pd.read_csv(file_path)
-                return df, f"Datos cargados desde {file_path}"
-            except Exception as e:
-                continue
+    # Intentar cargar de data/processed primero (prioridad absoluta)
+    processed_dir = script_dir / "data" / "processed"
+    csv_files = list(processed_dir.glob("*.csv"))
     
-    raise Exception("No se encontraron archivos de datos procesados en data/processed/")
+    if not csv_files:
+        print("❌ No se encontraron archivos CSV en data/processed/")
+        return None, "No hay datos procesados disponibles."
+    
+    # Prioridad 1: covid_estados_final.csv (dataset principal)
+    final_csv = processed_dir / "covid_estados_final.csv"
+    if final_csv.exists():
+        print("✅ Cargando desde data/processed/covid_estados_final.csv")
+        df = pd.read_csv(final_csv)
+        
+        # Verificar columna fecha y convertir
+        if 'fecha' in df.columns:
+            df['fecha'] = pd.to_datetime(df['fecha'], utc=True).dt.tz_localize(None)
+        
+        message = f"covid_estados_final.csv ({len(df)} registros, {df['estado'].nunique()} estados)"
+        return df, message
+    
+    # Fallback a otras opciones
+    if (processed_dir / "covid_estados_limpio.csv").exists():
+        print("⚠️ Usando covid_estados_limpio.csv como alternativa")
+        df = pd.read_csv(processed_dir / "covid_estados_limpio.csv")
+        if 'fecha' in df.columns:
+            df['fecha'] = pd.to_datetime(df['fecha'], utc=True).dt.tz_localize(None)
+        message = f"covid_estados_limpio.csv ({len(df)} registros)"
+        return df, message
+    
+    if (processed_dir / "covid_estados_poblacion.csv").exists():
+        print("⚠️ Usando covid_estados_poblacion.csv como alternativa")
+        df = pd.read_csv(processed_dir / "covid_estados_poblacion.csv")
+        if 'fecha' in df.columns:
+            df['fecha'] = pd.to_datetime(df['fecha'], utc=True).dt.tz_localize(None)
+        message = f"covid_estados_poblacion.csv ({len(df)} registros)"
+        return df, message
+    
+    # Fallback a data/raw si processed está vacío
+    raw_dir = script_dir / "data" / "raw"
+    if (raw_dir / "covid_cases_by_state.csv").exists():
+        print("⚠️ Usando data/raw/covid_cases_by_state.csv")
+        df = pd.read_csv(raw_dir / "covid_cases_by_state.csv")
+        df['fecha'] = pd.to_datetime(df['fecha'], utc=True).dt.tz_localize(None)
+        message = f"data/raw/covid_cases_by_state.csv ({len(df)} registros)"
+        return df, message
+    
+    if (raw_dir / "covid_deaths_by_state.csv").exists():
+        print("⚠️ Usando data/raw/covid_deaths_by_state.csv")
+        df = pd.read_csv(raw_dir / "covid_deaths_by_state.csv")
+        df['fecha'] = pd.to_datetime(df['fecha'], utc=True).dt.tz_localize(None)
+        message = f"data/raw/covid_deaths_by_state.csv ({len(df)} registros)"
+        return df, message
+    
+    # Último fallback: intentar unificar los archivos raw disponibles
+    print("🔄 Unificando archivos de datos brutos...")
+    dataframes = []
+    
+    for csv_file in raw_dir.glob("*.csv"):
+        try:
+            if 'covid_cases' in csv_file.stem.lower():
+                df_case = pd.read_csv(csv_file)
+                if 'fecha' in df_case.columns:
+                    df_case['fecha'] = pd.to_datetime(df_case['fecha'], utc=True).dt.tz_localize(None)
+                dataframes.append(df_case)
+            elif 'covid_deaths' in csv_file.stem.lower():
+                df_death = pd.read_csv(csv_file)
+                if 'fecha' in df_death.columns:
+                    df_death['fecha'] = pd.to_datetime(df_death['fecha'], utc=True).dt.tz_localize(None)
+                dataframes.append(df_death)
+        except Exception as e:
+            print(f"⚠️ Error leyendo {csv_file}: {e}")
+    
+    if dataframes:
+        df_combined = pd.concat(dataframes, ignore_index=True)
+        message = f"Unificados: {len(df_combined)} registros totales"
+        return df_combined, message
+    
+    return None, "No se pudieron cargar los datos. Revisa la consola para detalles."
 
-@st.cache_data(ttl=86400)
-def load_population_data():
-    """Cargar datos de población del censo"""
-    try:
-        return pd.read_csv("data/processed/covid_estados_poblacion.csv")
-    except Exception as e:
-        st.warning(f"⚠️ No se pudieron cargar datos de población: {str(e)[:50]}")
-        return None
+
+def get_available_metrics(df):
+    """Obtiene lista de métricas disponibles."""
+    return ['casos', 'muertes', 'hospitalizados'] + [col for col in df.columns if col not in ['casos', 'muertes', 'hospitalizados']]
+
 
 # ============================================
-# INICIALIZACIÓN DE SESIÓN
+# INICIALIZACIÓN DE SESSION STATE
 # ============================================
 
-if 'df' not in st.session_state:
+if "df" not in st.session_state:
     st.session_state.df = None
-if 'population_data' not in st.session_state:
-    st.session_state.population_data = load_population_data()
+
+if "selected_metric" not in st.session_state:
+    st.session_state.selected_metric = "casos"
+
+if "date_filter" not in st.session_state:
+    st.session_state.date_filter = None
+
 
 # ============================================
-# TÍTULO PRINCIPAL
-# ============================================
-
-st.markdown('<div class="main-title">🦠 COVID-19 Dashboard USA</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">Análisis Exploratorio de Datos Epidemiológicos 2020-2021</div>', unsafe_allow_html=True)
-
-# ============================================
-# SIDEBAR - CONTROLES Y CONFIGURACIÓN
+# SIDEBAR - CONFIGURACIÓN DEL PANEL
 # ============================================
 
 with st.sidebar:
-    st.header("⚙️ Configuración del Panel")
+    st.header("⚙️ Configuración del Panel", divider="primary")
     
-    # Selector de métrica principal
-    st.subheader("📊 Métrica a Visualizar")
-    available_metrics = ['casos', 'muertes', 'hospitalizados'] + [col for col in st.session_state.df.columns if col not in ['casos', 'muertes', 'hospitalizados']]
+    # Selector de métrica
+    available_metrics = get_available_metrics(st.session_state.df) if st.session_state.df is not None else []
     selected_metric = st.selectbox(
-        "Seleccionar variable:",
-        options=available_metrics,
-        index=0 if available_metrics else 0,
-        help="Seleccione la métrica epidemiológica a analizar"
+        "📊 Métrica a analizar:",
+        available_metrics,
+        index=available_metrics.index(st.session_state.selected_metric) if st.session_state.selected_metric in available_metrics else 0,
+        help="Selecciona la métrica que deseas analizar (casos, muertes, hospitalizados u otras)"
     )
+    st.session_state.selected_metric = selected_metric
     
     # Filtros temporales
     st.subheader("📅 Período Temporal")
@@ -119,28 +157,9 @@ with st.sidebar:
         st.session_state.date_filter = None
     else:
         days = {"-30 días": 30, "-60 días": 60, "-90 días": 90}
-        start_date = datetime.now().date() - pd.Timedelta(days=days[date_option])
-        st.session_state.date_filter = (start_date, datetime.now().date())
-    
-    # Información de los datos
-    st.subheader("📁 Estado de Carga")
-    
-    if st.session_state.df is not None:
-        df_temp = st.session_state.df
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.metric("Registros", f"{len(df_temp):,}")
-        
-        with col2:
-            st.metric("Columnas", len(df_temp.columns))
-        
-        with col3:
-            st.metric("Días de datos", df_temp['fecha'].nunique())
-        
-        with st.expander("Ver preview de datos"):
-            st.dataframe(df_temp.head(5), use_container_width=True)
+        start_date = datetime.datetime.now().date() - pd.Timedelta(days=days[date_option])
+        st.session_state.date_filter = (start_date, datetime.datetime.now().date())
+
 
 # ============================================
 # CARGA DE DATOS (UNA SOLA VEZ)
@@ -176,6 +195,7 @@ if st.session_state.df is None:
         st.stop()
 
 df = st.session_state.df
+
 
 # ============================================
 # SECCIÓN 1: MÉTRICAS CLAVE DEL PERÍODO
@@ -244,19 +264,19 @@ with col1:
     )
 
 # Preparar datos agrupados por estado
-region_aggregated = df.groupby('estado')[selected_metric].sum().sort_values(ascending=False)
+region_aggregated = df.groupby('estado')[st.session_state.selected_metric].sum().sort_values(ascending=False)
 
 with col2:
     if plot_type == "Bar Chart Horizontal":
         fig_bar = px.bar(
             region_aggregated.head(10).reset_index(),
             y='estado',
-            x=selected_metric,
+            x=st.session_state.selected_metric,
             orientation='h',
-            title=f"Top 10 Estados por {selected_metric.title()}",
-            color=selected_metric,
+            title=f"Top 10 Estados por {st.session_state.selected_metric.title()}",
+            color=st.session_state.selected_metric,
             color_continuous_scale="Viridis",
-            labels={selected_metric: selected_metric.title(), 'estado': 'Estado'}
+            labels={st.session_state.selected_metric: st.session_state.selected_metric.title(), 'estado': 'Estado'}
         )
         fig_bar.update_layout(height=450)
         
@@ -264,10 +284,10 @@ with col2:
         fig_line = px.line(
             filtered_df.sort_values('fecha'),
             x='fecha',
-            y=selected_metric,
-            title=f"Tendencia de {selected_metric.title()} a lo largo del tiempo",
+            y=st.session_state.selected_metric,
+            title=f"Tendencia de {st.session_state.selected_metric.title()} a lo largo del tiempo",
             markers=True,
-            labels={selected_metric: selected_metric.title(), 'fecha': 'Fecha'},
+            labels={st.session_state.selected_metric: st.session_state.selected_metric.title(), 'fecha': 'Fecha'},
             template="plotly_white"
         )
         fig_line.update_layout(height=400)
@@ -304,16 +324,16 @@ with col1:
 
 with col2:
     # Mostrar distribución de valores por estado (para variable seleccionada)
-    if len(df.groupby('estado')[selected_metric].count()) > 0:
+    if len(df.groupby('estado')[st.session_state.selected_metric].count()) > 0:
         with st.expander("📈 Distribución por Estado"):
-            state_counts = df.groupby('estado')[selected_metric].sum().sort_values(ascending=False).head(15)
+            state_counts = df.groupby('estado')[st.session_state.selected_metric].sum().sort_values(ascending=False).head(15)
             
             fig_state_dist = px.bar(
                 state_counts.reset_index(),
                 x='estado',
-                y=selected_metric,
-                title=f"Distribución por Estado ({selected_metric.title()})",
-                color=selected_metric,
+                y=st.session_state.selected_metric,
+                title=f"Distribución por Estado ({st.session_state.selected_metric.title()})",
+                color=st.session_state.selected_metric,
                 color_continuous_scale="Blues"
             )
             fig_state_dist.update_layout(height=350)
@@ -331,7 +351,7 @@ csv_buffer = df.to_csv(index=False).encode('utf-8')
 st.download_button(
     label="📥 Descargar todos los datos (CSV)",
     data=csv_buffer,
-    file_name=f"covid_eda_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+    file_name=f"covid_eda_data_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
     mime="text/csv",
     help="Descarga el conjunto completo de datos procesados para análisis externo"
 )
@@ -377,5 +397,5 @@ st.markdown("---")
 st.caption("""
 🦠 **COVID-19 EDA Dashboard** | Proyecto IA P1-BCN Maestría 2º | Análisis Exploratorio de Datos
 
-*Generado el {datetime.now().strftime('%d/%m/%Y %H:%M')} | Versión 1.0 para despliegue en Streamlit Cloud*
+*Generado el {datetime.datetime.now().strftime('%Y-%m-%d')} | Versión 1.0 para despliegue en Streamlit Cloud*
 """.format())
