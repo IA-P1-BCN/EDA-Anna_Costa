@@ -18,15 +18,18 @@ def load_data():
 
 df = load_data()
 
-# Obtener fechas del dataset para filtros temporales correctos
+# ============================================
+# CONFIGURACIÓN INICIAL (FECHAS DEL DATASET)
+# ============================================
+
 first_date_dataset = df['fecha'].min().date()
 last_date_dataset = df['fecha'].max().date()
 total_days = (last_date_dataset - first_date_dataset).days + 1
 
+first_str = df['fecha'].min().strftime('%d/%m/%Y')
+last_str = df['fecha'].max().strftime('%d/%m/%Y')
+
 if "initialized" not in st.session_state:
-    first_str = df['fecha'].min().strftime('%d/%m/%Y')
-    last_str = df['fecha'].max().strftime('%d/%m/%Y')
-    
     cols = st.columns(4)
     with cols[0]: st.metric("Registros", len(df))
     with cols[1]: st.metric("Estados", df['estado'].nunique())
@@ -43,12 +46,10 @@ if "initialized" not in st.session_state:
 with st.sidebar:
     st.header("Configuración")
     
-    # Definir columnas disponibles para el selector de métricas
     base_metrics = ['casos_acum', 'muertes_acum', 'hospitalizados_actuales', 'tests_acum']
     other_metrics = [col for col in df.columns if col not in base_metrics and 'acum' not in col.lower()]
     metric_columns = sorted(base_metrics + other_metrics, key=str.lower)
     
-    # Por defecto seleccionar casos_acum (índice 0 en lista ordenada alfabéticamente)
     selected_metric = st.selectbox(
         "Métrica a analizar:", 
         metric_columns,
@@ -58,7 +59,6 @@ with st.sidebar:
     
     st.session_state.selected_metric = selected_metric
     
-    # Guardar también para evitar problemas de reinicio
     if 'metric_col_original' not in st.session_state:
         st.session_state.metric_col_original = selected_metric
     
@@ -67,7 +67,6 @@ with st.sidebar:
     st.header("Periodo temporal:")
     st.caption(f"📅 El dataset va del {first_str} al {last_str}")
     
-    # Opciones temporales usando fechas del dataset
     date_option = st.radio(
         "Filtrar por:",
         ["Todo el periodo disponible", "-30 días desde la última fecha", 
@@ -75,7 +74,6 @@ with st.sidebar:
         horizontal=True
     )
     
-    # Inicializar filtros temporales con fecha máxima del dataset como referencia
     if date_option == "Todo el periodo disponible":
         st.session_state.date_filter = None
         st.info("🟢 Mostrar TODOS los datos disponibles")
@@ -84,7 +82,6 @@ with st.sidebar:
         days_map = {"-30 días desde la última fecha": 30, "-60 días desde la última fecha": 60, 
                     "-90 días desde la última fecha": 90}
         days = days_map[date_option]
-        # Calcular fechas relativas a la última fecha del dataset (NO "hoy")
         last_date_ts = pd.Timestamp(last_date_dataset)
         start_date = last_date_ts - pd.Timedelta(days=days)
         end_date = last_date_ts
@@ -253,13 +250,11 @@ if not filtered_df.empty and 'fecha' in filtered_df.columns:
             valid_values = filtered_df[metric_col].dropna()
             
             if len(valid_values) > 0:
-                # Usar formato string para evitar problemas con fechas futuras
                 grouped['year_week'] = grouped['fecha'].dt.strftime('%Y-W%W')
                 
                 weekly_trend = grouped.groupby(['year_week', 'estado'])[metric_col].sum().reset_index()
                 
                 if len(weekly_trend) > 0:
-                    # Top 5 estados por métrica seleccionada - USAR NLARGEST
                     top_5_by_metric = filtered_df.groupby('estado')[metric_col].sum().nlargest(5).index.tolist()
                     
                     if len(top_5_by_metric) > 0:
