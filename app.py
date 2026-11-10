@@ -168,8 +168,12 @@ if not filtered_df.empty and metric_col in filtered_df.columns:
     available_metrics = [col for col in base_columns if col in filtered_df.columns]
     
     if len(available_metrics) > 1:
+        # Crear dataframe de comparación con nombres originales
+        metric_col_orig = metric_col  # Guardar nombre original para ordenar
         compare_df = filtered_df.groupby('estado')[available_metrics].sum().reset_index()
-        compare_df = compare_df.sort_values(metric_col, ascending=False).head(20)
+        
+        # Ordenar por la métrica original ANTES de renombrar
+        compare_df = compare_df.sort_values(metric_col_orig, ascending=False).head(20)
         
         col_names = {col: col.replace('_', ' ').title() for col in available_metrics}
         compare_df.rename(columns=col_names, inplace=True)
