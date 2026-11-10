@@ -65,6 +65,7 @@ with st.sidebar:
     
     st.divider()
     
+    # Inicializar filtros temporales con fecha máxima del dataset
     last_date_ts = df['fecha'].max()
     
     date_option = st.radio(
@@ -74,14 +75,17 @@ with st.sidebar:
         key="date_filter"
     )
     
+    # Setear filtros según selección del usuario
     if date_option == "Completo":
         st.session_state.date_filter = None
+        st.info("✅ Mostrar todos los datos")
     else:
         days_map = {"-30 días": 30, "-60 días": 60, "-90 días": 90}
         days = days_map[date_option]
         end_date = last_date_ts.date()
         start_date = (last_date_ts - pd.Timedelta(days=days)).date()
         st.session_state.date_filter = (start_date, end_date)
+        st.caption(f"📌 {start_date} a {end_date}")
 
 # ============================================
 # APLICAR FILTROS
